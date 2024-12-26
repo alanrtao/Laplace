@@ -1,5 +1,5 @@
 #include <iostream>
-#include <git2.h>
+#include "git2.h"
 
 int main() {
     std::cout<<"Hello world\n";
