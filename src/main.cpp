@@ -1,14 +1,24 @@
 #include <iostream>
-#include "git2.h"
+#include <git2.h>
+#include "utils.h"
 
-int main() {
-    std::cout<<"Hello world\n";
+void test_func();
+
+int main(int argc, char* argv[]) {
+    std::cout<<"hello\n";
     
-    // Initialize libgit2
     if (git_libgit2_init() < 0) {
         std::cerr << "Failed to initialize libgit2" << std::endl;
         return 1;
     }
+    defer([]{ git_libgit2_shutdown(); });
+    defer([]{ std::cout<<"goodbye\n"; });
+
+    test_func();
+    return 0;
+}
+
+void test_func() {
 
     // Open the repository at the current directory
     git_repository* repo = nullptr;
@@ -18,8 +28,7 @@ int main() {
         const git_error* e = git_error_last();
         std::cerr << "Failed to open repository: "
                   << (e && e->message ? e->message : "Unknown error") << std::endl;
-        git_libgit2_shutdown();
-        return 1;
+        return;
     }
 
     // Get the HEAD reference
@@ -29,8 +38,7 @@ int main() {
         std::cerr << "Failed to get HEAD reference: "
                   << (e && e->message ? e->message : "Unknown error") << std::endl;
         git_repository_free(repo);
-        git_libgit2_shutdown();
-        return 1;
+        return;
     }
 
     // Print the HEAD reference name
@@ -40,7 +48,4 @@ int main() {
     // Cleanup
     git_reference_free(head_ref);
     git_repository_free(repo);
-    git_libgit2_shutdown();
-
-    return 0;
 }

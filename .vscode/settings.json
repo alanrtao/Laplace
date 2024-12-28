@@ -2,5 +2,6 @@
     "files.associations": {
         "iostream": "cpp",
         "git2.h": "c"
-    }
+    },
+    "cmake.automaticReconfigure": false
 }

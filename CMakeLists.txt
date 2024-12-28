@@ -20,3 +20,9 @@ add_executable(laplace ${sources})
 target_compile_options(laplace PRIVATE -O2)
 target_include_directories(laplace PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/external/libgit2/include)
 target_link_libraries(laplace PRIVATE libgit2package)
+
+# refresh docker image
+add_custom_target(laplace-docker ALL
+    COMMAND docker build -t laplace ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS laplace
+)
