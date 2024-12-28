@@ -6,7 +6,7 @@
         {
             "label": "Laplace: run",
             "type": "shell",
-            "command": "cd build; make -j; docker run --rm -it laplace",
+            "command": "cd build && make -j && docker run --rm -it laplace",
             "problemMatcher": []
         },
     ]

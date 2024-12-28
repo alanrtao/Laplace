@@ -1,0 +1,10 @@
+function checkpoint_minor() {
+    echo ">> chkpt: $BASH_COMMAND";
+}
+
+function checkpoint_major() {
+    date;
+}
+
+# export PROMPT_COMMAND='checkpoint_major;'
+trap checkpoint_minor DEBUG;
