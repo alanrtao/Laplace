@@ -1,44 +1,51 @@
 function __laplace() {
-    exec 100< <(env -0)
-    exec 101< <(alias | tr '\n' '\0')
-    # exec 102< <(declare -f) # function names can be listed via `declare -F` but it's hard to split each one
+    exec 2220< <(env -0)
+    exec 2221< <(while IFS="" read A; do alias $A; printf "\0"; done < <(compgen -a))
+    exec 2222< <(while IFS="" read S; do echo $S; printf "\0"; done < <(shopt -p))
+    exec 2223< <(while IFS="" read F; do $F; printf "\0"; done < <(declare -F))
 
-    exec 102< <(while read F; do $F; printf "\0"; done < <(declare -F))
+    # there is also a DEBUG trap but we are taking up that
+    # the section here is to prevent using a subshell, we first generate the for loop
+    # code to a temp file, then source that code in the current shell
+    srcf=$(mktemp)
 
-    echo "$BASH_COMMAND" | /bin/laplace -i PROMPT_COMMAND -i __laplace -i __laplace_precommand -i __laplace_postcommand \
-    100 env \
-    101 alias \
-    102 func
+    tmpf=$(mktemp -u)
+    exec 2224<>$tmpf
+    for SIG in $(seq 0 64) ERR RETURN; do
+      echo "trap -p ${SIG} >>${tmpf}">>$srcf
+      echo "printf \"\\0\" >>${tmpf}">>$srcf
+    done
 
-    exec 100<&-
-    exec 101<&-
-    exec 102<&-
+    source $srcf
+    rm -f $srcf
+
+    echo $1 | /bin/laplace \
+    -i PROMPT_COMMAND -i __laplace -i __laplace_precommand -i __laplace_postcommand \
+    2220 env 2221 alias 2222 shopt 2223 func 2224 trap
+
+    exec 2220<&-
+    exec 2221<&-
+    # exec 2222<&-
+    exec 2223<&-
+    exec 2224<&-
 }
 
-# https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
-
-# This will run before any command is executed.
 function __laplace_precommand() {
+  # https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
+  # prevents trap from executing within post command
   if [ -z "$AT_PROMPT" ]; then
     return
   fi
   unset AT_PROMPT
-  __laplace
+  __laplace "cmd=$BASH_COMMAND"
 }
 trap "__laplace_precommand" DEBUG
 
-# This will run after the execution of the previous full command line.  We don't
-# want it PostCommand to execute when first starting a bash session (i.e., at
-# the first prompt).
-FIRST_PROMPT=1
 function __laplace_postcommand() {
   AT_PROMPT=1
 
-  if [ -n "$FIRST_PROMPT" ]; then
-    unset FIRST_PROMPT
-    return
-  fi
-
-  __laplace
+  # https://stackoverflow.com/questions/16372433/linux-command-to-generate-new-guid
+  __laplace "chkpt=$(cat /proc/sys/kernel/random/uuid)"
 }
 PROMPT_COMMAND="__laplace_postcommand"
+
