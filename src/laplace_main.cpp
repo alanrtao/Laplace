@@ -45,6 +45,9 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
 }
 
 
+metadata_t curr_metadata;
+std::mutex metadata_lock;
+
 std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
    
     defer([&shell]{ kill(shell.pid, SIGKILL); });
@@ -82,9 +85,14 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
         int n = recvfrom(sock_fd, buf.data(), 1024 * 1024, 0, NULL, NULL);
 
         if (n > 0) {
-            std::cout<<"Received: "<<std::string(buf.begin(), buf.begin() + n - 1)<<std::endl; // flush is required here
+            const auto deserialize = glz::read_json<metadata_t>(std::string_view(buf.begin(), buf.begin() + n - 1));
+            throwif(deserialize);
+            
+            std::lock_guard<std::mutex> _ (metadata_lock);
+            curr_metadata = deserialize.value();
+            // std::cout<<"Received: "<<std::string(buf.begin(), buf.begin() + n - 1)<<std::endl; // flush is required here
         } else if (n < 0) { 
-            std::cerr << "recvfrom" + ERRNO << "\n";
+            // std::cerr << "recvfrom" + ERRNO << "\n";
         }
     }
 

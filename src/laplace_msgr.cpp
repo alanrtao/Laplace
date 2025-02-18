@@ -1,5 +1,7 @@
 #include <sstream>
 #include <iostream>
+#include <ranges>
+#include <algorithm>
 
 #include <dirent.h>
 #include "unistd.h"
@@ -15,18 +17,22 @@
 std::expected<void, std::string> msg(
     const opts_msgr_t& opts) noexcept
 {
-    std::unordered_map<std::string, std::string> metadata {};
-    metadata.reserve(opts.metadata.size());
+    metadata_t metadata {
+        .command = opts.command
+    };
+    metadata.body.reserve(opts.metadata.size());
+
     for (const auto& [fd, metadata_type] : opts.metadata) {
-        metadata[metadata_type] = read_file_descriptor(fd);
+        const auto raw = read_file_descriptor(fd);
+        for (const auto& item : raw | std::ranges::views::split('\0')) {
+            const auto item_str = std::string(item.begin(), item.end());
+            if (item_str.size() > 0) {
+                metadata.body[metadata_type].push_back(item_str);
+            }
+        }
     }
 
-    const auto _json = glz::merge{ 
-        std::unordered_map<std::string, std::string> {{"command", opts.command}},
-        metadata
-    };
-
-    const auto json = glz::write_json(_json);
+    const auto json = glz::write_json(metadata);
     throwif(json);
 
     int sock = socket(AF_UNIX, SOCK_DGRAM, 0);

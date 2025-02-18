@@ -2,6 +2,7 @@
 
 #include <string>
 #include <unordered_map>
+#include <vector>
 
 struct opts_main_t {
     std::string frontend;
@@ -22,6 +23,5 @@ void msgr_mode(const opts_msgr_t& opts);
 
 struct metadata_t {
     std::string command;
-    std::string env;
-    std::string alias;
+    std::unordered_map<std::string, std::vector<std::string>> body;
 };

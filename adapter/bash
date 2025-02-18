@@ -1,16 +1,21 @@
 function checkpoint_minor() {
-    exec 3< <(env)
-    exec 4< <(alias)
+    exec 100< <(env -0)
+    exec 101< <(alias | tr '\n' '\0')
+    # exec 102< <(declare -f)
 
-    echo "$BASH_COMMAND" | /bin/laplace 3 env 4 alias
+    echo "$BASH_COMMAND" | /bin/laplace \
+    100 env \
+    101 alias
+    # 102 func
 
-    exec 3<&-
-    exec 4<&-
+    exec 100<&-
+    exec 101<&-
+    # exec 102<&-
 }
 
-# function checkpoint_major() {
-#     date
-# }
+function checkpoint_major() {
+    date
+}
 
 # export PROMPT_COMMAND='checkpoint_major;'
 trap checkpoint_minor DEBUG;

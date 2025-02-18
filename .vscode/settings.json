@@ -86,7 +86,11 @@
         "shared_mutex": "cpp",
         "stdfloat": "cpp",
         "__verbose_abort": "cpp",
-        "execution": "cpp"
+        "execution": "cpp",
+        "__bit_reference": "cpp",
+        "__hash_table": "cpp",
+        "__split_buffer": "cpp",
+        "__tree": "cpp"
     },
     "cmake.automaticReconfigure": false
 }
