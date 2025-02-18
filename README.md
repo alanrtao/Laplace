@@ -5,7 +5,7 @@ if anything goes wrong. A Git-like commit history mechanism is used, where each 
 effects (on files and variables) within the workspace is captured.
 
 ## Building
-- Use CMake (and Ninja) to build the library. Doing so will also create a Docker image named `laplace`
+- `mkdir build`, `cd build`, `CC=clang CXX=clang++ cmake ..`, `make -j`
 
 ## Usage
 - `docker run --rm -it laplace`

@@ -7,4 +7,4 @@ RUN apt-get update && \
 COPY ./build/laplace /bin
 COPY ./adapter/ /adapter/
 
-ENTRYPOINT ["/bin/laplace"]
+ENTRYPOINT ["/bin/laplace", "bash"]

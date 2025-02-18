@@ -15,8 +15,6 @@ set(BUILD_CLI OFF CACHE STRING INTERNAL FORCE)
 set(LINK_WITH_STATIC_LIBRARIES ON CACHE STRING INTERNAL FORCE)
 add_subdirectory(external/libgit2)
 
-add_subdirectory(external/cxxopts)
-
 add_subdirectory(external/glaze)
 
 file(GLOB_RECURSE sources src/*.cpp src/*.h)
@@ -25,9 +23,6 @@ target_compile_options(laplace PRIVATE -O2)
 target_include_directories(laplace PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/external/libgit2/include
     ${CMAKE_CURRENT_SOURCE_DIR}/external/glaze/include
-
-    # header only libraries
-    ${CMAKE_CURRENT_SOURCE_DIR}/external/cxxopts/include
 )
 target_link_libraries(laplace PRIVATE
     libgit2package
