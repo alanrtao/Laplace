@@ -1,15 +1,16 @@
 function checkpoint_minor() {
-    # echo "$BASH_COMMAND" | /bin/laplace -c "$BASH_COMMAND"
+    exec 3< <(env)
+    exec 4< <(alias)
 
-    # https://stackoverflow.com/questions/39529648/how-to-iterate-through-all-the-env-variables-printing-key-and-value
-    while IFS='=' read -r -d '' n v; do
-        printf "%s=%s" "$n" "$v" | /bin/laplace -c "$BASH_COMMAND"
-    done < <(env -0)
+    echo "$BASH_COMMAND" | /bin/laplace 3 env 4 alias
+
+    exec 3<&-
+    exec 4<&-
 }
 
-function checkpoint_major() {
-    date
-}
+# function checkpoint_major() {
+#     date
+# }
 
-export PROMPT_COMMAND='checkpoint_major;'
+# export PROMPT_COMMAND='checkpoint_major;'
 trap checkpoint_minor DEBUG;

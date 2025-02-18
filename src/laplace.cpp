@@ -14,8 +14,7 @@ void main_mode(const opts_main_t &opts)
 
 void msgr_mode(const opts_msgr_t &opts)
 {
-    const auto env = parse_environ();
-    const auto result = msg(opts, env);
+    const auto result = msg(opts);
     if (!result) {
         std::cerr << result.error() << std::endl;
     }

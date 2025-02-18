@@ -1,5 +1,7 @@
 #include <sstream>
+#include <iostream>
 
+#include <dirent.h>
 #include "unistd.h"
 #include "sys/socket.h"
 #include "sys/un.h"
@@ -9,28 +11,22 @@
 #include "laplace_msgr.h"
 #include "utils.h"
 
-std::unordered_map<std::string, std::string> parse_environ() noexcept {
-
-    std::unordered_map<std::string, std::string> env {};
-    for (size_t i = 0; environ[i] != nullptr; ++i) {
-        const std::string line(environ[i]);
-        const auto split = line.find('=');
-        env.emplace(
-            // key
-            line.substr(0, split),
-            // value
-            line.substr(split+1)
-        );
-    }
-
-    return env;
-}
 
 std::expected<void, std::string> msg(
-    const opts_msgr_t& opts,
-    const std::unordered_map<std::string, std::string>& env) noexcept
+    const opts_msgr_t& opts) noexcept
 {
-    const auto json = glz::write_json(env);
+    std::unordered_map<std::string, std::string> metadata {};
+    metadata.reserve(opts.metadata.size());
+    for (const auto& [fd, metadata_type] : opts.metadata) {
+        metadata[metadata_type] = read_file_descriptor(fd);
+    }
+
+    const auto _json = glz::merge{ 
+        std::unordered_map<std::string, std::string> {{"command", opts.command}},
+        metadata
+    };
+
+    const auto json = glz::write_json(_json);
     throwif(json);
 
     int sock = socket(AF_UNIX, SOCK_DGRAM, 0);

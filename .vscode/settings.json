@@ -84,7 +84,9 @@
         "coroutine": "cpp",
         "latch": "cpp",
         "shared_mutex": "cpp",
-        "stdfloat": "cpp"
+        "stdfloat": "cpp",
+        "__verbose_abort": "cpp",
+        "execution": "cpp"
     },
     "cmake.automaticReconfigure": false
 }

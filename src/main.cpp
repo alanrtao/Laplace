@@ -30,45 +30,47 @@ int main(int argc, char *argv[])
     };
     opts.add_options("main", main_opts);
 
-    const std::initializer_list<cxxopts::Option> msgr_opts {
-        { "c,command", "Bash command that was run", cxxopts::value<std::string>() }
-    };
-    opts.add_options("msgr", msgr_opts);
-
-    const bool use_msgr_mode = argv[1];// stdin_populated(); // only engage in messaging mode if thre is data to be read in STDIN
-    std::vector<std::string> msgr_opts_names (msgr_opts.size());
-    if (use_msgr_mode) {
-        std::transform(msgr_opts.begin(), msgr_opts.end(), msgr_opts_names.begin(), [](const cxxopts::Option& o) { return o.opts_.substr(2); });
-        opts.parse_positional(msgr_opts_names);
-    }
-
-    const auto parsed = opts.parse(argc, argv);
-
-    if (parsed.contains("help")) {
-        std::cout << opts.help();
-        return 0;
-    }
-
-    if (use_msgr_mode)
+    if (stdin_populated())
     {
-        for (const auto& name : msgr_opts_names) {
-            if (!parsed.contains(name)) {
-                std::cerr << "Argument `" << name << "` required!\n";
-                return 1;
+        std::string input(std::istreambuf_iterator<char>(std::cin), {});
+
+        std::unordered_map<int, std::string> metadata {};
+        metadata.reserve(argc / 2);
+
+        for (int i = 1; i < argc;) {
+            try {            
+                const auto k = std::stoi(argv[i++]);
+
+                if (i == argc) {
+                    std::cerr<<"Messenger arguments must alternate between fd (int) and metadata type!\n";
+                    return 1;
+                }
+
+                const auto v = std::string(argv[i++]);
+                metadata[k] = v;
+            } catch (...) {
+                std::cerr<<"Messenger arguments must alternate between fd (int) and metadata type!\n";
             }
         }
 
         msgr_mode({
-            .command=parsed["command"].as<std::string>(),
+            .command=input,
+            .metadata=metadata
         });
     }
     else
     {
+        const auto parsed = opts.parse(argc, argv);
+
+        if (parsed.contains("help")) {
+            std::cout << opts.help();
+            return 0;
+        }
+
         const auto shell = parsed["shell"].as<std::string>();
         main_mode({
             .frontend=shell,
             .frontend_path="/bin/"+shell,
-            // .socket=parsed["descriptor"].as<int>(),
         });
     }
 }

@@ -22,3 +22,15 @@ struct _defer {
 
 #define throw(str) return std::unexpected((str) + "\n")
 #define throwif(expected) { if (!expected) { throw(std::to_string(expected.error())); } }
+
+inline std::string read_file_descriptor(const int fd) {
+    std::string result {};
+    char buffer[4096];  // Read in chunks
+    ssize_t bytesRead;
+    
+    while ((bytesRead = read(fd, buffer, sizeof(buffer))) > 0) {
+        result.append(buffer, bytesRead);
+    }
+
+    return result;
+}

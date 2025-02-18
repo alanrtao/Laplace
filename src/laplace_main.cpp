@@ -8,6 +8,7 @@
 #include "sys/wait.h"
 
 #include "git2.h"
+#include <glaze/json.hpp>
 
 #include "laplace_main.h"
 #include "utils.h"
@@ -35,12 +36,6 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
             NULL
         };
 
-        // std::string env_laplace_fd = "LAPLACE_FD=" + std::to_string(opts.socket);
-        // char * const envp[] = {
-        //     const_cast<char*>(env_laplace_fd.c_str()),
-        //     NULL
-        // };
-
         execve(opts.frontend_path.c_str(), argv, NULL); 
 
         throw("Execute shell failure: " + ERRNO);
@@ -56,7 +51,8 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
 
     auto t_wait = std::thread([&shell](){
         while(waitpid(shell.pid, NULL, 0) != shell.pid);
-        raise(SIGINT);
+        std::cerr << "Shell terminated\n";
+        std::exit(0);
     });
 
     /* Create socket from which to read. */
@@ -80,16 +76,16 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
         throw("Bind socket: " + ERRNO);
     }
 
+    std::array<char, 1 * 1024 * 1024> buf {};
     while (true) {
-        std::array<char, 1 * 1024 * 1024> buf {};
 
-        int n = recvfrom(sock_fd, buf.data(), 1024, 0, NULL, NULL);
-        if (n < 0) { std::cerr << "recvfrom" + ERRNO << "\n"; }
-        else if (n > 0) {
-            std::cout<<"Received: "<<std::string(buf.begin(), buf.begin() + n - 1);
+        int n = recvfrom(sock_fd, buf.data(), 1024 * 1024, 0, NULL, NULL);
+
+        if (n > 0) {
+            std::cout<<"Received: "<<std::string(buf.begin(), buf.begin() + n - 1)<<std::endl; // flush is required here
+        } else if (n < 0) { 
+            std::cerr << "recvfrom" + ERRNO << "\n";
         }
-
-
     }
 
     return {};
