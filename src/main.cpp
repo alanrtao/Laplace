@@ -31,32 +31,8 @@ int main(int argc, char *argv[])
     opts.add_options("main", main_opts);
 
     if (stdin_populated())
-    {
-        std::string input(std::istreambuf_iterator<char>(std::cin), {});
-
-        std::unordered_map<int, std::string> metadata {};
-        metadata.reserve(argc / 2);
-
-        for (int i = 1; i < argc;) {
-            try {            
-                const auto k = std::stoi(argv[i++]);
-
-                if (i == argc) {
-                    std::cerr<<"Messenger arguments must alternate between fd (int) and metadata type!\n";
-                    return 1;
-                }
-
-                const auto v = std::string(argv[i++]);
-                metadata[k] = v;
-            } catch (...) {
-                std::cerr<<"Messenger arguments must alternate between fd (int) and metadata type!\n";
-            }
-        }
-
-        msgr_mode({
-            .command=input,
-            .metadata=metadata
-        });
+    {   
+        msgr_mode(opts_msgr_t(argc, argv));
     }
     else
     {

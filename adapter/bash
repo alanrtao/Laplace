@@ -1,21 +1,44 @@
-function checkpoint_minor() {
+function __laplace() {
     exec 100< <(env -0)
     exec 101< <(alias | tr '\n' '\0')
-    # exec 102< <(declare -f)
+    # exec 102< <(declare -f) # function names can be listed via `declare -F` but it's hard to split each one
 
-    echo "$BASH_COMMAND" | /bin/laplace \
+    exec 102< <(while read F; do $F; printf "\0"; done < <(declare -F))
+
+    echo "$BASH_COMMAND" | /bin/laplace -i PROMPT_COMMAND -i __laplace -i __laplace_precommand -i __laplace_postcommand \
     100 env \
-    101 alias
-    # 102 func
+    101 alias \
+    102 func
 
     exec 100<&-
     exec 101<&-
-    # exec 102<&-
+    exec 102<&-
 }
 
-function checkpoint_major() {
-    date
-}
+# https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
 
-# export PROMPT_COMMAND='checkpoint_major;'
-trap checkpoint_minor DEBUG;
+# This will run before any command is executed.
+function __laplace_precommand() {
+  if [ -z "$AT_PROMPT" ]; then
+    return
+  fi
+  unset AT_PROMPT
+  __laplace
+}
+trap "__laplace_precommand" DEBUG
+
+# This will run after the execution of the previous full command line.  We don't
+# want it PostCommand to execute when first starting a bash session (i.e., at
+# the first prompt).
+FIRST_PROMPT=1
+function __laplace_postcommand() {
+  AT_PROMPT=1
+
+  if [ -n "$FIRST_PROMPT" ]; then
+    unset FIRST_PROMPT
+    return
+  fi
+
+  __laplace
+}
+PROMPT_COMMAND="__laplace_postcommand"

@@ -3,6 +3,7 @@
 #include <string>
 #include <unordered_map>
 #include <vector>
+#include <unordered_set>
 
 struct opts_main_t {
     std::string frontend;
@@ -13,6 +14,9 @@ struct opts_main_t {
 struct opts_msgr_t {
     std::string command;
     std::unordered_map<int, std::string> metadata;
+    std::unordered_set<std::string> ignores;
+
+    opts_msgr_t(int argc, char** argv);
 };
 
 inline const std::string laplace_socket_path = "/tmp/laplace.sock";

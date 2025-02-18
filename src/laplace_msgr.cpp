@@ -26,9 +26,17 @@ std::expected<void, std::string> msg(
         const auto raw = read_file_descriptor(fd);
         for (const auto& item : raw | std::ranges::views::split('\0')) {
             const auto item_str = std::string(item.begin(), item.end());
+            
+            for (const auto& ignore : opts.ignores) {
+                if (item_str.rfind(ignore, 0) == 0) {
+                    goto ignore_item;
+                }
+            }
+
             if (item_str.size() > 0) {
                 metadata.body[metadata_type].push_back(item_str);
             }
+            ignore_item: continue;
         }
     }
 
