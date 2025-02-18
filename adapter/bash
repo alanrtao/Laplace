@@ -1,10 +1,15 @@
 function checkpoint_minor() {
-    echo ">> chkpt: $BASH_COMMAND";
+    # echo "$BASH_COMMAND" | /bin/laplace -c "$BASH_COMMAND"
+
+    # https://stackoverflow.com/questions/39529648/how-to-iterate-through-all-the-env-variables-printing-key-and-value
+    while IFS='=' read -r -d '' n v; do
+        printf "%s=%s" "$n" "$v" | /bin/laplace -c "$BASH_COMMAND"
+    done < <(env -0)
 }
 
 function checkpoint_major() {
-    date;
+    date
 }
 
-# export PROMPT_COMMAND='checkpoint_major;'
+export PROMPT_COMMAND='checkpoint_major;'
 trap checkpoint_minor DEBUG;

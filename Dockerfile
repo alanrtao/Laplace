@@ -1,6 +1,10 @@
 FROM ubuntu:latest
 
-COPY ./build/laplace /
+RUN apt-get update && \
+    apt-get install -y socat net-tools && \
+    rm -rf /var/lib/apt/lists/*
+
+COPY ./build/laplace /bin
 COPY ./adapter/ /adapter/
 
-CMD ["/laplace"]
+ENTRYPOINT ["/bin/laplace"]

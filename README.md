@@ -4,11 +4,8 @@ Laplace is primarily meant to be a shell education tool. The motivating principl
 if anything goes wrong. A Git-like commit history mechanism is used, where each bash command is a commit and its
 effects (on files and variables) within the workspace is captured.
 
-The name is inspired by "Laplace's demon" which tracks everything.
+## Building
+- Use CMake to build the library. Doing so will also create a Docker image named `laplace`
 
 ## Usage
-
-## Dependencies
-- Git does not perfectly implement what is required, namely it always leaves a `.git` folder in the workspace, which is
-  not ideal. So instead we use `libgit2` to implement a minimal set of functions needed from Git, such as diffing.
-- 
+- `docker run --rm -it laplace`
