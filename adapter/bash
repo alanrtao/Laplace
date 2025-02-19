@@ -1,7 +1,7 @@
 function __laplace() {
     exec 2220< <(env -0)
     exec 2221< <(while IFS="" read A; do printf $A=; alias $A; printf "\0"; done < <(compgen -a))
-    exec 2222< <(shopt -p) # don't break shopt output, there's no point
+    exec 2222< <(printf "_="; shopt -p) # don't break shopt output, there's no point
     exec 2223< <(while IFS="" read F; do printf $F=; $F; printf "\0"; done < <(declare -F))
 
     # there is also a DEBUG trap but we are taking up that

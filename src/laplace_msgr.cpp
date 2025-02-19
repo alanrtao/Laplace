@@ -32,11 +32,14 @@ std::expected<void, std::string> msg(
                     goto ignore_item;
                 }
             }
-
-            if (item_str.size() > 0) {
-                metadata.body[metadata_type].push_back(item_str);
-            }
             ignore_item: continue;
+
+            if (item_str.size() == 0) { continue; }
+
+            auto sep = item_str.find_first_of('=');
+            if (sep == std::string::npos) { continue; }
+            
+            metadata.body[metadata_type][item_str.substr(0, sep)] = item_str.substr(sep+1);
         }
     }
 

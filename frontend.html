@@ -1,74 +1,82 @@
 <html ng-app="app">
 <head>
-    <script type="text/javascript">
-
-    function receiveWebSocketUpdate(e) {
-        pkt = JSON.parse(e.data);
-
-        console.log(pkt);
-
-        if(pkt.hasOwnProperty("command")) {
-            var li = document.createElement("li");
-            li.appendChild(document.createTextNode(pkt.command));
-            vcsContainer.appendChild(li);
-        } else {
-            console.error(pkt);
-        }
-    };
-
-    function connectToServer(url) {
-        let socket = new WebSocket(url);
-
-        socket.onopen = () => {
-            console.log("WebSocket connected");
-            webSocketMsgOnce("/fetch").then((data) => {
-                console.log(data);
-            });
-        }
-
-        socket.onmessage = (e) => {
-            console.log(e);
-        }
-
-        socket.onclose = () => {
-            console.log("WebSocket closed, retrying in 1 second...");
-            setTimeout(() => connectToServer(url), 1000);
-        };
-
-        socket.onerror = (error) => console.error("WebSocket error:", error);
-    }
-
-    function webSocketMsgOnce(path, data) {
-        return new Promise((resolve, reject) => {
-            let socket = new WebSocket("ws://localhost:8008" + path);
-
-            socket.onopen = () => {
-                socket.send(JSON.stringify(data));
-            }
-
-            socket.onmessage = (e) => {
-                resolve(e);
-                socket.close();
-            }
-
-            socket.onerror = (e) => {
-                reject(e);
-            }
-        });
-    }
-
-    function sendMsg() {
-        ws.send("hello");
-    }
-
-    connectToServer("ws://localhost:8008");
-
-    </script>
 </head>
 <body>
 
     <ul id="vcs">
     </ul>
 
+    <script type="text/javascript">document.addEventListener('DOMContentLoaded', function() {
+        function clearItems() {
+            var vcsContainer = document.getElementById("vcs");
+            while (vcsContainer.firstChild) {
+                vcsContainer.removeChild(vcsContainer.firstChild);
+            }
+        }
+    
+        function addItem(metadata) {
+            var vcsContainer = document.getElementById("vcs");
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode(metadata.command));
+            vcsContainer.appendChild(li);
+        }
+    
+        function recvUpdate(e) {
+            pkt = JSON.parse(e.data);
+            if(pkt.hasOwnProperty("command")) {
+                addItem(pkt);
+            } else {
+                console.error(pkt);
+            }
+        };
+    
+        function connectToServer(url) {
+            let socket = new WebSocket(url);
+    
+            socket.onopen = () => {
+                webSocketMsgOnce("/fetch").then((msg) => {
+                    obj = JSON.parse(msg.data);
+                    clearItems();
+                    obj.forEach(element => {
+                        addItem(element);
+                    });
+                });
+            }
+    
+            socket.onmessage = recvUpdate;
+    
+            socket.onclose = () => {
+                console.log("WebSocket closed, retrying in 1 second...");
+                setTimeout(() => connectToServer(url), 1000);
+            };
+    
+            socket.onerror = (error) => console.error("WebSocket error:", error);
+        }
+    
+        function webSocketMsgOnce(path, data) {
+            return new Promise((resolve, reject) => {
+                let socket = new WebSocket("ws://localhost:8008" + path);
+    
+                socket.onopen = () => {
+                    socket.send(JSON.stringify(data));
+                }
+    
+                socket.onmessage = (e) => {
+                    resolve(e);
+                    socket.close();
+                }
+    
+                socket.onerror = (e) => {
+                    reject(e);
+                }
+            });
+        }
+    
+        function sendMsg() {
+            ws.send("hello");
+        }
+    
+        connectToServer("ws://localhost:8008");
+    });</script>
 </body>
 </html>

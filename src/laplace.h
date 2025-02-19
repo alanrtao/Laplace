@@ -27,7 +27,7 @@ void msgr_mode(const opts_msgr_t& opts);
 
 struct metadata_t {
     std::string command;
-    std::unordered_map<std::string, std::vector<std::string>> body;
+    std::unordered_map<std::string, std::unordered_map<std::string, std::string>> body;
 };
 
 struct diff_element_t {
