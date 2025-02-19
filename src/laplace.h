@@ -29,3 +29,20 @@ struct metadata_t {
     std::string command;
     std::unordered_map<std::string, std::vector<std::string>> body;
 };
+
+struct diff_element_t {
+    std::string type;
+    std::string value;
+};
+
+struct metadata_diff_t {
+    std::string command;
+    std::unordered_map<std::string, std::vector<diff_element_t>> body;
+};
+
+metadata_diff_t metadata_diff(const metadata_t& from, const metadata_t& to);
+
+struct checkpoint_t {
+    std::string guid;
+    std::vector<metadata_diff_t> diffs;
+};

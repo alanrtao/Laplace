@@ -5,7 +5,8 @@ if anything goes wrong. A Git-like commit history mechanism is used, where each 
 effects (on files and variables) within the workspace is captured.
 
 ## Building
+- `git submodule update --init --recursive`
 - `mkdir build`, `cd build`, `CC=clang CXX=clang++ cmake ..`, `make -j`
 
 ## Usage
-- `docker run --rm -it laplace`
+- `docker run --rm -it -p 8008:8008/tcp laplace`

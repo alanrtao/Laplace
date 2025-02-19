@@ -1,0 +1,74 @@
+<html ng-app="app">
+<head>
+    <script type="text/javascript">
+
+    function receiveWebSocketUpdate(e) {
+        pkt = JSON.parse(e.data);
+
+        console.log(pkt);
+
+        if(pkt.hasOwnProperty("command")) {
+            var li = document.createElement("li");
+            li.appendChild(document.createTextNode(pkt.command));
+            vcsContainer.appendChild(li);
+        } else {
+            console.error(pkt);
+        }
+    };
+
+    function connectToServer(url) {
+        let socket = new WebSocket(url);
+
+        socket.onopen = () => {
+            console.log("WebSocket connected");
+            webSocketMsgOnce("/fetch").then((data) => {
+                console.log(data);
+            });
+        }
+
+        socket.onmessage = (e) => {
+            console.log(e);
+        }
+
+        socket.onclose = () => {
+            console.log("WebSocket closed, retrying in 1 second...");
+            setTimeout(() => connectToServer(url), 1000);
+        };
+
+        socket.onerror = (error) => console.error("WebSocket error:", error);
+    }
+
+    function webSocketMsgOnce(path, data) {
+        return new Promise((resolve, reject) => {
+            let socket = new WebSocket("ws://localhost:8008" + path);
+
+            socket.onopen = () => {
+                socket.send(JSON.stringify(data));
+            }
+
+            socket.onmessage = (e) => {
+                resolve(e);
+                socket.close();
+            }
+
+            socket.onerror = (e) => {
+                reject(e);
+            }
+        });
+    }
+
+    function sendMsg() {
+        ws.send("hello");
+    }
+
+    connectToServer("ws://localhost:8008");
+
+    </script>
+</head>
+<body>
+
+    <ul id="vcs">
+    </ul>
+
+</body>
+</html>

@@ -4,7 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${workspaceFolder}/external/*/include"
+                "${workspaceFolder}/external/*/include",
+                "${workspaceFolder}/external/IXWebSocket"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/clang",
