@@ -180,7 +180,7 @@ void on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::Web
     }
     else if (msg->type == ix::WebSocketMessageType::Message)
     {
-        const auto& uri = msg->openInfo.uri;
+        const auto& uri = msg->openInfo.uri; // todo: distinguish URI path
         const std::lock_guard<std::mutex> lock(data_lock);
 
         auto json = glz::write_json(metadata_history);

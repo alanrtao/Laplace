@@ -14,6 +14,16 @@
 #include "utils.h"
 
 
+bool should_ignore(const opts_msgr_t& opts, const std::string_view& item_str) noexcept {
+    for (const auto& ignore : opts.ignores) {
+        if (item_str.rfind(ignore, 0) == 0) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 std::expected<void, std::string> msg(
     const opts_msgr_t& opts) noexcept
 {
@@ -25,21 +35,17 @@ std::expected<void, std::string> msg(
     for (const auto& [fd, metadata_type] : opts.metadata) {
         const auto raw = read_file_descriptor(fd);
         for (const auto& item : raw | std::ranges::views::split('\0')) {
-            const auto item_str = std::string(item.begin(), item.end());
+            if (std::distance(item.begin(), item.end()) == 0) { continue; }
+
+            auto sep = std::find(item.begin(), item.end(), '=');
+            if (sep == item.end()) { continue; }
             
-            for (const auto& ignore : opts.ignores) {
-                if (item_str.rfind(ignore, 0) == 0) {
-                    goto ignore_item;
-                }
+            std::string_view val (sep + 1, item.end());
+            if (should_ignore(opts, val)) {
+                continue;
             }
-            ignore_item: continue;
-
-            if (item_str.size() == 0) { continue; }
-
-            auto sep = item_str.find_first_of('=');
-            if (sep == std::string::npos) { continue; }
             
-            metadata.body[metadata_type][item_str.substr(0, sep)] = item_str.substr(sep+1);
+            metadata.body[metadata_type][std::string(item.begin(), sep)] = val;
         }
     }
 
