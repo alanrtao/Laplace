@@ -6,6 +6,7 @@
 #include "sys/socket.h"
 #include "sys/un.h"
 #include "sys/wait.h"
+#include <sys/sendfile.h>
 
 #include "git2.h"
 #include <glaze/json.hpp>
@@ -14,13 +15,26 @@
 #include "laplace_main.h"
 #include "utils.h"
 
+std::string oid_str(const git_oid& oid) {
+    return std::string(git_oid_tostr_s(&oid));
+}
+
+git_oid str_oid(const std::string& str) {
+    git_oid ret;
+    git_oid_fromstr(&ret, str.c_str());
+    return ret;
+}
+
 void on_shell_msg(const std::string_view msg);
 void on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket & webSocket, const ix::WebSocketMessagePtr & msg);
 
 void append_msg_to_current_commit(const metadata_t& msg);
+
 void serialize_metadata(const metadata_t& msg);
+void apply_serialized_metadata();
+
 git_commit* create_new_commit();
-void add_commit_to_tree(git_commit* commit);
+void add_commit_to_branch(git_commit* commit);
 
 inline shell_t shell {};
 
@@ -67,10 +81,11 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
     git_libgit2_init();
     defer([&shell]{ 
         kill(shell.pid, SIGKILL);
-        for (auto& [_, b] : branches) {
-            for (auto& commit : b) {
+        for (auto& [b_ref, b_commits] : branches) {
+            for (auto& commit : b_commits) {
                 git_commit_free(commit);
             }
+            git_reference_free(b_ref);
         }
         git_repository_free(repo);
         git_libgit2_shutdown();
@@ -160,35 +175,28 @@ void on_shell_msg(const std::string_view msg) {
 
     // subcommand message does not contain state information
     if (update.body.size() == 0) {
-        append_msg_to_current_commit();
+        append_msg_to_current_commit(update);
     }
     // command message contains at least the skeleton of the state,
     // which will always contain some entries.
     else {
-        // for first ever message, create a repository
-        if (!repo) {
-            git_repository_init(&repo, "/__laplace", false);
+        serialize_metadata(update);
+
+        git_commit* commit = create_new_commit();
+        // case 1: no branches at all, starting from a blank repository
+        if (!current_branch.has_value()) {
+
         }
-        
-        // TODO: create git commit and use its id as guid
-        git_oid oid;
-        git_signature* sig;
-        git_signature_now(&sig, "_", "_@laplace.com");
-        
-        git_index *index;
-        git_oid tree_id;
-        git_tree *tree;
-        git_repository_index(&index, repo);
-        git_index_add_all(index, NULL, 0, NULL, NULL);
-        git_index_write_tree(&tree_id, index);
+        // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD
+        else if (git_repository_head_detached(repo)) {
 
-        git_index_free(index);
+        }
+        // case 3: branch exists and is currently the HEAD
+        else {
 
-        // https://libgit2.org/docs/examples/init/
-        git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, "", tree, 0);
-        std::cout << "Create new checkpoint commit " << std::string((const char* ) oid.id, 20) << std::endl;
+        }
 
-        git_signature_free(sig);
+        add_commit_to_branch(commit);
     }
 
     for (const auto& c : server.getClients()) {
@@ -216,27 +224,114 @@ void append_msg_to_current_commit(const metadata_t &msg)
 
 void serialize_metadata(const metadata_t & msg)
 {
-    for (const auto& [k, v] : msg.body) {
-        std::string fname = "/__laplace_" + k;
-        int fd = open(fname.c_str(), O_WRONLY);
-        for (const auto& [item_k, item_v] : v) {                
-            write(fd, item_v.c_str(), item_v.size() + 1);
+    // - __laplace
+    // |---- k1
+    // |-------- v1
+    // |-------- v2
+    // |-------- v3
+    // |---- k2
+    // ...
+    for (const auto& [k, vs] : msg.body) {
+        std::string d_k = "/__laplace/" + k;
+        mkdir(d_k.c_str(), 0644);
+
+        for (const auto& [v, val] : vs) {
+            std::string f_v = d_k + "/" + v;
+            int fd_v = open(f_v.c_str(), O_WRONLY);
+            write(fd_v, val.c_str(), val.size());
+            close(fd_v);
         }
-        close(fd);
     }
+}
+
+void apply_serialized_metadata()
+{
+    // - __laplace
+    // |---- k1
+    // |-------- v1
+    // |-------- v2
+    // |-------- v3
+    // |---- k2
+    // ...
+
+    // each of k will be written to one tempfile called /tmp/__laplace_{k}
+    // containing v1, v2, ... separated by \0
+
+    // write each metadata type into a single temp file
+    for (auto& k_ent : std::filesystem::directory_iterator("/__laplace")) {
+        if (!k_ent.is_directory()) { continue; }
+        
+        auto k = k_ent.path().filename().string();
+
+        // skip hidden folders such as .git
+        if (k[0] == '.') {
+            continue;
+        }
+
+        std::string f_dst = "/tmp/__laplace_" + k;
+        int fd_dst = open(f_dst.c_str(), O_WRONLY | O_APPEND);
+        
+        for (auto& v_ent : std::filesystem::directory_iterator(k_ent.path()) ) {
+            auto v = v_ent.path();
+            int fd_src = open(v.c_str(), O_RDONLY);
+            struct stat stat_buf;
+            fstat(fd_src,&stat_buf);
+
+            sendfile(fd_dst, fd_src, NULL, stat_buf.st_size);
+
+            close(fd_src);
+            write(fd_dst, "\0", 1);
+        }
+
+        close(fd_dst);
+    }
+    
+    kill(shell.pid, SIGUSR1);
 }
 
 git_commit *create_new_commit()
 {
-    return nullptr;
+    // for first ever message, create a repository
+    if (!repo) {
+        git_repository_init(&repo, "/__laplace", false);
+    }
+
+    // TODO: create git commit and use its id as guid
+    git_oid oid;
+    git_signature* sig;
+    git_signature_now(&sig, "_", "_@laplace.com");
+    
+    git_index *index;
+    git_oid tree_id;
+    git_tree *tree;
+    git_repository_index(&index, repo);
+    git_index_add_all(index, NULL, 0, NULL, NULL);
+    git_index_write_tree(&tree_id, index);
+
+    git_index_free(index);
+
+    // https://libgit2.org/docs/examples/init/
+    git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, "", tree, 0);
+    std::cout << "Create new checkpoint commit " << std::string((const char* ) oid.id, 20) << std::endl;
+
+    git_signature_free(sig);
+    
+    git_commit * ret;
+    git_commit_lookup(&ret, repo, &oid);
+    
+    return ret;
 }
 
-git_tree* create_tree() {
-
-}
-
-void add_commit_to_tree(git_commit *commit)
+void add_commit_to_branch(git_commit *commit)
 {
+    git_commit* parent;
+    git_commit_parent(&parent, commit, 0);
+
+    if (parent == NULL) {
+        // create initial branch of the tree
+    } else {
+
+    }
 }
 
 // Client API
@@ -279,14 +374,14 @@ void on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::Web
         }
 
         if (req.endpoint == "fetch") {
-            auto json = glz::write_json();
-            // auto req = glz::read_json<req_t>(msg->str);
-            if (json.has_value()) {
-                ws.send(*json);
-            }
+            ws.send("lol");
+            // auto json = glz::write_json();
+            // if (json.has_value()) {
+            //     ws.send(*json);
+            // }
         }
         else if (req.endpoint == "jump") {
-            on_client_msg_jump(req.params);
+            on_client_msg_jump(str_oid(req.params));
         }
         
     }
@@ -310,18 +405,6 @@ void on_client_msg_jump(const git_oid& oid) {
         return;
     }
 
-    git_repository_set_head(repo, );
-
-    // TODO: adapt this to libgit2
-    // // write each metadata type into a single temp file
-    // for (const auto& [k, v] : md.body) {
-    //     std::string fname = "/tmp/__laplace_" + k;
-    //     int fd = open(fname.c_str(), O_WRONLY);
-    //     for (const auto& [item_k, item_v] : v) {                
-    //         write(fd, item_v.c_str(), item_v.size() + 1);
-    //     }
-    //     close(fd);
-    // }
-    
-    kill(shell.pid, SIGUSR1);
+    git_repository_set_head_detached(repo, &oid);
+    apply_serialized_metadata();
 }
