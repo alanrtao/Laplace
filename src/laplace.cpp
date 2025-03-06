@@ -20,13 +20,6 @@ void msgr_mode(const opts_msgr_t &opts)
     }
 }
 
-metadata_diff_t metadata_diff(const metadata_t &from, const metadata_t &to)
-{
-    return metadata_diff_t {
-        .command = to.command
-    };
-}
-
 inline std::string __msgr_help = "Messenger usage: [-i <name>]... [<fd> <metadata type>]...\n";
 
 opts_msgr_t::opts_msgr_t(int argc, char **argv)
