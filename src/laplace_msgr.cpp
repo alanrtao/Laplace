@@ -16,7 +16,7 @@
 
 bool should_ignore(const opts_msgr_t& opts, const std::string_view& item_str) noexcept {
     for (const auto& ignore : opts.ignores) {
-        if (item_str.rfind(ignore, 0) == 0) {
+        if (item_str.find(ignore) == std::string::npos) {
             return true;
         }
     }
@@ -28,7 +28,7 @@ std::expected<void, std::string> msg(
     const opts_msgr_t& opts) noexcept
 {
     metadata_t metadata {
-        .command = opts.command
+        .commands = { opts.command }
     };
     metadata.body.reserve(opts.metadata.size());
 

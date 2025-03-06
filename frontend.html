@@ -35,7 +35,7 @@
             let socket = new WebSocket(url);
     
             socket.onopen = () => {
-                webSocketMsgOnce("/fetch").then((msg) => {
+                webSocketMsgOnce({ endpoint:"fetch", params:"" }).then((msg) => {
                     obj = JSON.parse(msg.data);
                     clearItems();
                     obj.forEach(element => {
@@ -54,12 +54,12 @@
             socket.onerror = (error) => console.error("WebSocket error:", error);
         }
     
-        function webSocketMsgOnce(path, data) {
+        function webSocketMsgOnce(req) {
             return new Promise((resolve, reject) => {
-                let socket = new WebSocket("ws://localhost:8008" + path);
+                let socket = new WebSocket("ws://localhost:8008");
     
                 socket.onopen = () => {
-                    socket.send(JSON.stringify(data));
+                    socket.send(JSON.stringify(req));
                 }
     
                 socket.onmessage = (e) => {
@@ -71,10 +71,6 @@
                     reject(e);
                 }
             });
-        }
-    
-        function sendMsg() {
-            ws.send("hello");
         }
     
         connectToServer("ws://localhost:8008");

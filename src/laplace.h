@@ -26,7 +26,7 @@ void main_mode(const opts_main_t& opts);
 void msgr_mode(const opts_msgr_t& opts);
 
 struct metadata_t {
-    std::string command;
+    std::vector<std::string> commands;
     std::unordered_map<std::string, std::unordered_map<std::string, std::string>> body;
 };
 
@@ -45,4 +45,9 @@ metadata_diff_t metadata_diff(const metadata_t& from, const metadata_t& to);
 struct checkpoint_t {
     std::string guid;
     std::vector<metadata_diff_t> diffs;
+};
+
+struct client_req_t {
+    std::string endpoint;
+    std::string params;
 };
