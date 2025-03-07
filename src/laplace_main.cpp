@@ -1,6 +1,7 @@
 #include <iostream>
 #include <filesystem>
 #include <thread>
+#include <stacktrace>
 
 #include "unistd.h"
 #include "sys/socket.h"
@@ -15,6 +16,16 @@
 #include "laplace_main.h"
 #include "utils.h"
 
+ix::WebSocketServer server(8008, "0.0.0.0");
+std::mutex server_lock;
+
+git_repository* repo = NULL;
+std::unordered_map<std::string, std::vector<git_commit*>> branches {};
+std::optional<std::string> current_branch = std::nullopt;
+
+std::mutex data_lock;
+inline shell_t shell {};
+
 std::string oid_str(const git_oid& oid) {
     return std::string(git_oid_tostr_s(&oid));
 }
@@ -25,18 +36,35 @@ git_oid str_oid(const std::string& str) {
     return ret;
 }
 
-void on_shell_msg(const std::string_view msg);
-void on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket & webSocket, const ix::WebSocketMessagePtr & msg);
+std::string ref_str(git_reference* ref) {
+    return git_reference_name(ref);
+}
 
-void append_msg_to_current_commit(const metadata_t& msg);
+git_reference* str_ref(const std::string& str) {
+    git_reference* ret;
+    git_reference_lookup(&ret, repo, str.c_str());
+    return ret;
+}
 
-void serialize_metadata(const metadata_t& msg);
-void apply_serialized_metadata();
+std::expected<void, int> on_shell_msg(const std::string_view msg);
+std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket & webSocket, const ix::WebSocketMessagePtr & msg);
 
-git_commit* create_new_commit();
-void add_commit_to_branch(git_commit* commit);
+std::expected<void, int> append_msg_to_current_commit(const metadata_t& msg);
 
-inline shell_t shell {};
+std::expected<void, int> serialize_metadata(const metadata_t& msg);
+std::expected<void, int> apply_serialized_metadata();
+std::expected<git_commit*, int> create_new_commit(git_commit* parent);
+
+// simplified from https://github.com/libgit2/libgit2/blob/21a351b0ed207d0871cb23e09c027d1ee42eae98/examples/common.c#L23
+void print_lg2_err(int error, const std::string& msg)
+{
+	const git_error *lg2err;
+	if ((lg2err = git_error_last()) != NULL && lg2err->message != NULL) {
+		std::cerr<<msg<<" - "<<lg2err->message<<std::endl;
+        // std::cerr<<std::stacktrace::current()<< std::endl;
+	}
+}
+#define lg2(e, msg) { if (e) { print_lg2_err((e), (msg)); return std::unexpected(e); } }
 
 std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexcept {
     const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
@@ -54,13 +82,13 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
     if (shell.pid == 0) {
         // TODO: look into zsh params
         auto cmd = const_cast<char*>(opts.frontend_path.c_str());
-        char * const argv[] = { 
+        char * const argv[] = {
             cmd,
-            const_cast<char*>("--rcfile"), const_cast<char*>(adapter.c_str()), 
+            const_cast<char*>("--rcfile"), const_cast<char*>(adapter.c_str()),
             NULL
         };
 
-        execve(opts.frontend_path.c_str(), argv, NULL); 
+        execve(opts.frontend_path.c_str(), argv, NULL);
 
         throw("Execute shell failure: " + ERRNO);
     }
@@ -68,24 +96,14 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
     return shell;
 }
 
-ix::WebSocketServer server(8008, "0.0.0.0");
-std::mutex server_lock;
-
-git_repository* repo = NULL;
-std::unordered_map<git_reference*, std::vector<git_commit*>> branches {};
-std::optional<git_reference*> current_branch = std::nullopt;
-
-std::mutex data_lock;
-
 std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
     git_libgit2_init();
-    defer([&shell]{ 
+    defer([&shell]{
         kill(shell.pid, SIGKILL);
         for (auto& [b_ref, b_commits] : branches) {
             for (auto& commit : b_commits) {
                 git_commit_free(commit);
             }
-            git_reference_free(b_ref);
         }
         git_repository_free(repo);
         git_libgit2_shutdown();
@@ -108,7 +126,7 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
 
     if (const int status = git_libgit2_init(); status < 0) {
         throw("Failed to initialize libgit2" + std::to_string(status));
-    } 
+    }
     else { defer([]{ git_libgit2_shutdown(); }); }
 
     /* Create name. */
@@ -126,7 +144,7 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
         int n = recvfrom(sock_fd, buf.data(), 1024 * 1024, 0, NULL, NULL);
         if (n > 0) {
             on_shell_msg(std::string_view(buf.begin(), buf.begin() + n - 1));
-        } else if (n < 0) { 
+        } else if (n < 0) {
             std::cerr << "recvfrom" + ERRNO << "\n";
         }
     }
@@ -135,7 +153,7 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
 }
 
 void web_socket_server()
-{   
+{
     ix::SocketTLSOptions tls_opts {};
     tls_opts.tls = false;
     tls_opts.disable_hostname_validation = true;
@@ -145,7 +163,7 @@ void web_socket_server()
 
         server.setTLSOptions(tls_opts);
         server.setOnClientMessageCallback(on_client_msg);
-        
+
         const auto [success, error] = server.listen();
         if (!success)
         {
@@ -161,16 +179,17 @@ void web_socket_server()
 }
 
 
-void on_shell_msg(const std::string_view msg) {
+std::expected<void, int> on_shell_msg(const std::string_view msg) {
     std::lock_guard<std::mutex> lock(server_lock);
     glz::error_ctx json_err;
-    
+    int err;
+
     metadata_t update;
-    
+
     json_err = glz::read_json(update, msg);
     if (json_err) {
         std::cerr << json_err.custom_error_message << "\n";
-        return;
+        return std::unexpected(0);
     }
 
     // subcommand message does not contain state information
@@ -182,33 +201,52 @@ void on_shell_msg(const std::string_view msg) {
     else {
         serialize_metadata(update);
 
-        git_commit* commit = create_new_commit();
         // case 1: no branches at all, starting from a blank repository
         if (!current_branch.has_value()) {
+            lg2(git_repository_init(&repo, "/__laplace", 0), "create repository");
 
+            create_new_commit(NULL).and_then([](git_commit* commit) -> std::expected<void, int> {
+                git_reference* branch;
+                lg2(git_branch_create(&branch, repo, "main", commit, 0), "git branch create");
+                lg2(git_repository_set_head(repo, "refs/heads/main"), "git repository set head"); // refs/heads is automatically used
+                git_reference_free(branch);
+                branches["main"] = { commit };
+                current_branch = "main";
+                return {};
+            }); // head at new commit
         }
-        // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD
-        else if (git_repository_head_detached(repo)) {
-
-        }
-        // case 3: branch exists and is currently the HEAD
         else {
 
         }
+        // // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD
+        // else if (git_repository_head_detached(repo)) {
 
-        add_commit_to_branch(commit);
+        //     // git_repository_head(, repo);
+        //     // git_commit* commit = create_new_commit(NULL);
+        //     // git_reference* branch;
+        //     // git_branch_create(&branch, repo, ("b" + std::to_string(branches.size())).c_str(), commit, 0);
+        //     // branches[branch] = { commit };
+        // }
+        // // case 3: branch exists and is currently the HEAD
+        // else {
+        //     // git_reference*
+        //     // git_repository_head(, repo);
+        //     // git_commit* commit = create_new_commit(*current_branch);
+        // }
     }
 
     for (const auto& c : server.getClients()) {
         c->send(std::string(msg));
     }
+
+    return {};
 }
 
-void append_msg_to_current_commit(const metadata_t &msg)
+std::expected<void, int> append_msg_to_current_commit(const metadata_t &msg)
 {
     if (!repo || !current_branch.has_value()) {
         std::cerr << "must not send subcommand updates";
-        return;
+        return std::unexpected(0);
     }
     // append subcommand to commit message of guid
     auto& branch = branches[*current_branch];
@@ -217,12 +255,15 @@ void append_msg_to_current_commit(const metadata_t &msg)
     for (const auto& cmd : msg.commands) {
         curr_commit_msg += cmd;
     }
+
     git_oid oid;
     git_commit_amend(&oid, curr, NULL, NULL, NULL, NULL, curr_commit_msg.c_str(), NULL);
-    std::cout << "Amend subcommand to " << std::string((const char* ) oid.id, 20) << std::endl;
+    std::cout << "Amend subcommand to " << oid_str(oid) << std::endl;
+
+    return {};
 }
 
-void serialize_metadata(const metadata_t & msg)
+std::expected<void, int> serialize_metadata(const metadata_t & msg)
 {
     // - __laplace
     // |---- k1
@@ -242,9 +283,11 @@ void serialize_metadata(const metadata_t & msg)
             close(fd_v);
         }
     }
+
+    return {};
 }
 
-void apply_serialized_metadata()
+std::expected<void, int> apply_serialized_metadata()
 {
     // - __laplace
     // |---- k1
@@ -260,7 +303,7 @@ void apply_serialized_metadata()
     // write each metadata type into a single temp file
     for (auto& k_ent : std::filesystem::directory_iterator("/__laplace")) {
         if (!k_ent.is_directory()) { continue; }
-        
+
         auto k = k_ent.path().filename().string();
 
         // skip hidden folders such as .git
@@ -270,7 +313,7 @@ void apply_serialized_metadata()
 
         std::string f_dst = "/tmp/__laplace_" + k;
         int fd_dst = open(f_dst.c_str(), O_WRONLY | O_APPEND);
-        
+
         for (auto& v_ent : std::filesystem::directory_iterator(k_ent.path()) ) {
             auto v = v_ent.path();
             int fd_src = open(v.c_str(), O_RDONLY);
@@ -285,59 +328,45 @@ void apply_serialized_metadata()
 
         close(fd_dst);
     }
-    
+
     kill(shell.pid, SIGUSR1);
+
+    return {};
 }
 
-git_commit *create_new_commit()
+std::expected<git_commit*, int> create_new_commit(git_commit* parent)
 {
-    // for first ever message, create a repository
-    if (!repo) {
-        git_repository_init(&repo, "/__laplace", false);
-    }
+    int err;
 
     // TODO: create git commit and use its id as guid
     git_oid oid;
     git_signature* sig;
-    git_signature_now(&sig, "_", "_@laplace.com");
-    
+    lg2(git_signature_now(&sig, "_", "_@laplace.com"), "git_signature_now");
+
     git_index *index;
     git_oid tree_id;
     git_tree *tree;
-    git_repository_index(&index, repo);
-    git_index_add_all(index, NULL, 0, NULL, NULL);
-    git_index_write_tree(&tree_id, index);
-
+    lg2(git_repository_index(&index, repo), "git_repository_index");
+    lg2(git_index_add_all(index, NULL, 0, NULL, NULL), "git_index_add_all");
+    lg2(git_index_write_tree(&tree_id, index), "git_index_write_tree");
     git_index_free(index);
 
     // https://libgit2.org/docs/examples/init/
-    git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, "", tree, 0);
-    std::cout << "Create new checkpoint commit " << std::string((const char* ) oid.id, 20) << std::endl;
+    lg2(git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, "", tree, 1, parent), "git_commit_create");
+    std::cout << "Create new checkpoint commit " << oid_str(oid) << std::endl;
 
     git_signature_free(sig);
-    
-    git_commit * ret;
-    git_commit_lookup(&ret, repo, &oid);
-    
-    return ret;
-}
 
-void add_commit_to_branch(git_commit *commit)
-{
-    git_commit* parent;
-    git_commit_parent(&parent, commit, 0);
+    git_commit* ret;
+    lg2(git_commit_lookup(&ret, repo, &oid), "commit lookup");
 
-    if (parent == NULL) {
-        // create initial branch of the tree
-    } else {
-
-    }
+    return {ret};
 }
 
 // Client API
-void on_client_msg_jump(const git_oid& guid);
+std::expected<void, int> on_client_msg_jump(const git_oid& guid);
 
-void on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket& ws, const ix::WebSocketMessagePtr& msg) {
+std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket& ws, const ix::WebSocketMessagePtr& msg) {
     // The ConnectionState object contains information about the connection,
     // at this point only the client ip address and the port.
     // std::cout << "Remote ip: " << connectionState->getRemoteIp() << std::endl;
@@ -370,41 +399,32 @@ void on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::Web
         auto err = glz::read_json<client_req_t>(req, msg->str);
         if (err) {
             std::cerr << err.custom_error_message << "\n";
-            return;
+            return std::unexpected((int)err.ec);
         }
 
         if (req.endpoint == "fetch") {
-            ws.send("lol");
+            ws.send("received client fetch");
             // auto json = glz::write_json();
             // if (json.has_value()) {
             //     ws.send(*json);
             // }
+
+            // TODO: send GIT branch history as mermaid
         }
         else if (req.endpoint == "jump") {
             on_client_msg_jump(str_oid(req.params));
         }
-        
+
     }
+
+    return {};
 }
 
-void on_client_msg_jump(const git_oid& oid) {
-    std::lock_guard<std::mutex> lock(data_lock);
-    int err;
-
+std::expected<void, int> on_client_msg_jump(const git_oid& oid) {
+    std::lock_guard<std::mutex> lock(data_lock);\
     git_commit* commit;
-
-    err = git_commit_lookup(&commit, repo, &oid);
-    if (err) {
-        std::cerr << "git_commit_lookup " << std::to_string(err) << std::endl;
-        return;
-    }
-
-    err = git_reset(repo, (git_object*) commit, GIT_RESET_HARD, NULL);
-    if (err) {
-        std::cerr << "git_reset (hard) " << std::to_string(err) << std::endl;
-        return;
-    }
-
-    git_repository_set_head_detached(repo, &oid);
-    apply_serialized_metadata();
+    lg2(git_commit_lookup(&commit, repo, &oid), "git commit lookup");
+    lg2(git_reset(repo, (git_object*) commit, GIT_RESET_HARD, NULL), "git reset");
+    lg2(git_repository_set_head_detached(repo, &oid), "jump back to " + oid_str(oid));
+    return apply_serialized_metadata();
 }
