@@ -9,4 +9,5 @@ effects (on files and variables) within the workspace is captured.
 - `mkdir build`, `cd build`, `CC=clang CXX=clang++ cmake ..`, `make -j`
 
 ## Usage
-- `mkdir playground`, then `docker run --rm -it -p 8008:8008/tcp -v~/__laplace:/__laplace laplace`
+> For now, please clear the playground folder before running, since Laplace does not actually handle prior saves very well.
+- `mkdir playground`, then `docker run --rm -it -p 8008:8008/tcp -vplayground:/__laplace laplace`

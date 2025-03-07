@@ -257,8 +257,8 @@ std::expected<void, int> append_msg_to_current_commit(const metadata_t &msg)
     }
 
     git_oid oid;
-    git_commit_amend(&oid, curr, NULL, NULL, NULL, NULL, curr_commit_msg.c_str(), NULL);
-    std::cout << "Amend subcommand to " << oid_str(oid) << std::endl;
+    lg2(git_commit_amend(&oid, curr, NULL, NULL, NULL, NULL, curr_commit_msg.c_str(), NULL), "git_commit_amend");
+    std::cout << "Amend subcommand(s) to " << oid_str(oid) << std::endl;
 
     return {};
 }
@@ -279,6 +279,7 @@ std::expected<void, int> serialize_metadata(const metadata_t & msg)
         for (const auto& [v, val] : vs) {
             std::string f_v = d_k + "/" + v;
             int fd_v = open(f_v.c_str(), O_WRONLY);
+            std::cout << k << "[" << v << "]: " << val << std::endl;
             write(fd_v, val.c_str(), val.size());
             close(fd_v);
         }
@@ -349,12 +350,14 @@ std::expected<git_commit*, int> create_new_commit(git_commit* parent)
     lg2(git_repository_index(&index, repo), "git_repository_index");
     lg2(git_index_add_all(index, NULL, 0, NULL, NULL), "git_index_add_all");
     lg2(git_index_write_tree(&tree_id, index), "git_index_write_tree");
+    lg2(git_tree_lookup(&tree, repo, &tree_id), "look up actual tree obj from tree_id");
     git_index_free(index);
 
     // https://libgit2.org/docs/examples/init/
     lg2(git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, "", tree, 1, parent), "git_commit_create");
     std::cout << "Create new checkpoint commit " << oid_str(oid) << std::endl;
 
+    git_tree_free(tree);
     git_signature_free(sig);
 
     git_commit* ret;

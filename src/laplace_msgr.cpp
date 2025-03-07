@@ -16,7 +16,7 @@
 
 bool should_ignore(const opts_msgr_t& opts, const std::string_view& item_str) noexcept {
     for (const auto& ignore : opts.ignores) {
-        if (item_str.find(ignore) == std::string::npos) {
+        if (item_str.find(ignore) != std::string::npos) {
             return true;
         }
     }
@@ -40,12 +40,13 @@ std::expected<void, std::string> msg(
             auto sep = std::find(item.begin(), item.end(), '=');
             if (sep == item.end()) { continue; }
             
-            std::string_view val (sep + 1, item.end());
-            if (should_ignore(opts, val)) {
+            std::string name (item.begin(), sep);
+            std::string val (sep + 1, item.end());
+            if (should_ignore(opts, name)) {
                 continue;
             }
             
-            metadata.body[metadata_type][std::string(item.begin(), sep)] = val;
+            metadata.body[metadata_type][name] = val;
         }
     }
 
