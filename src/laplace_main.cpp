@@ -20,6 +20,7 @@ ix::WebSocketServer server(8008, "0.0.0.0");
 std::mutex server_lock;
 
 git_repository* repo = NULL;
+std::vector<std::string> subcommands {};
 std::unordered_map<std::string, std::vector<git_commit*>> branches {};
 std::optional<std::string> current_branch = std::nullopt;
 
@@ -40,20 +41,12 @@ std::string ref_str(git_reference* ref) {
     return git_reference_name(ref);
 }
 
-git_reference* str_ref(const std::string& str) {
-    git_reference* ret;
-    git_reference_lookup(&ret, repo, str.c_str());
-    return ret;
-}
-
 std::expected<void, int> on_shell_msg(const std::string_view msg);
 std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket & webSocket, const ix::WebSocketMessagePtr & msg);
 
-std::expected<void, int> append_msg_to_current_commit(const metadata_t& msg);
-
 std::expected<void, int> serialize_metadata(const metadata_t& msg);
 std::expected<void, int> apply_serialized_metadata();
-std::expected<git_commit*, int> create_new_commit(git_commit* parent);
+std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_reference* branch_ref);
 
 // simplified from https://github.com/libgit2/libgit2/blob/21a351b0ed207d0871cb23e09c027d1ee42eae98/examples/common.c#L23
 void print_lg2_err(int error, const std::string& msg)
@@ -64,7 +57,7 @@ void print_lg2_err(int error, const std::string& msg)
         // std::cerr<<std::stacktrace::current()<< std::endl;
 	}
 }
-#define lg2(e, msg) { if (e) { print_lg2_err((e), (msg)); return std::unexpected(e); } }
+#define lg2(e, msg) { if (auto __v = (e); __v) { print_lg2_err(__v, (msg)); return std::unexpected(__v); } }
 
 std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexcept {
     const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
@@ -195,7 +188,9 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
 
     // subcommand message does not contain state information
     if (update.body.size() == 0) {
-        append_msg_to_current_commit(update);
+        for (auto& cmd : update.commands) {
+            subcommands.push_back(cmd);
+        }
     }
     // command message contains at least the skeleton of the state,
     // which will always contain some entries.
@@ -206,7 +201,7 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
         if (!current_branch.has_value()) {
             lg2(git_repository_init(&repo, "/__laplace", 0), "create repository");
 
-            create_new_commit(NULL).and_then([](git_commit* commit) -> std::expected<void, int> {
+            create_new_commit(NULL, NULL).and_then([](git_commit* commit) -> std::expected<void, int> {
                 git_reference* branch;
                 lg2(git_branch_create(&branch, repo, "main", commit, 0), "git branch create");
                 lg2(git_repository_set_head(repo, "refs/heads/main"), "git repository set head"); // refs/heads is automatically used
@@ -216,50 +211,39 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
                 return {};
             }); // head at new commit
         }
-        else {
+        // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD
+        else if (git_repository_head_detached(repo)) {
 
+            // git_repository_head(, repo);
+            // git_commit* commit = create_new_commit(NULL);
+            // git_reference* branch;
+            // git_branch_create(&branch, repo, ("b" + std::to_string(branches.size())).c_str(), commit, 0);
+            // branches[branch] = { commit };
         }
-        // // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD
-        // else if (git_repository_head_detached(repo)) {
+        // case 3: branch exists and is currently the HEAD
+        else {
+            git_reference* branch;
+            lg2(git_branch_lookup(&branch, repo, current_branch->c_str(), GIT_BRANCH_LOCAL), "look up current branch " + *current_branch);
+            
+            const git_oid* parent_commit_oid = git_reference_target(branch);
+            if (!parent_commit_oid) { lg2(1, "git reference target" )}
 
-        //     // git_repository_head(, repo);
-        //     // git_commit* commit = create_new_commit(NULL);
-        //     // git_reference* branch;
-        //     // git_branch_create(&branch, repo, ("b" + std::to_string(branches.size())).c_str(), commit, 0);
-        //     // branches[branch] = { commit };
-        // }
-        // // case 3: branch exists and is currently the HEAD
-        // else {
-        //     // git_reference*
-        //     // git_repository_head(, repo);
-        //     // git_commit* commit = create_new_commit(*current_branch);
-        // }
+            git_commit* parent_commit;
+            git_commit_lookup(&parent_commit, repo, parent_commit_oid);
+            
+            auto new_commit = create_new_commit(parent_commit, branch);
+            if (new_commit.has_value()) {
+                branches[*current_branch].push_back(*new_commit);
+            }
+
+            git_commit_free(parent_commit);
+            git_reference_free(branch);
+        }
     }
 
     for (const auto& c : server.getClients()) {
         c->send(std::string(msg));
     }
-
-    return {};
-}
-
-std::expected<void, int> append_msg_to_current_commit(const metadata_t &msg)
-{
-    if (!repo || !current_branch.has_value()) {
-        std::cerr << "must not send subcommand updates";
-        return std::unexpected(0);
-    }
-    // append subcommand to commit message of guid
-    auto& branch = branches[*current_branch];
-    auto& curr = branch.back();
-    std::string curr_commit_msg(git_commit_message(curr));
-    for (const auto& cmd : msg.commands) {
-        curr_commit_msg += cmd;
-    }
-
-    git_oid oid;
-    lg2(git_commit_amend(&oid, curr, NULL, NULL, NULL, NULL, curr_commit_msg.c_str(), NULL), "git_commit_amend");
-    std::cout << "Amend subcommand(s) to " << oid_str(oid) << std::endl;
 
     return {};
 }
@@ -341,7 +325,7 @@ std::expected<void, int> apply_serialized_metadata()
     return {};
 }
 
-std::expected<git_commit*, int> create_new_commit(git_commit* parent)
+std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_reference* branch_ref)
 {
     int err;
 
@@ -359,15 +343,28 @@ std::expected<git_commit*, int> create_new_commit(git_commit* parent)
     lg2(git_tree_lookup(&tree, repo, &tree_id), "look up actual tree obj from tree_id");
     git_index_free(index);
 
+    std::string subcommands_str = "";
+    for (const auto& subcommand : subcommands) {
+        subcommands_str.append(subcommand);
+        subcommands_str.append("\n");
+    }
+
     // https://libgit2.org/docs/examples/init/
-    lg2(git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, "", tree, 1, parent), "git_commit_create");
-    std::cout << "Create new checkpoint commit " << oid_str(oid) << std::endl;
+    lg2(git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, subcommands_str.c_str(), tree, 1, parent), "git_commit_create");
+    // std::cout << "Create new checkpoint commit " << oid_str(oid) << std::endl;
 
     git_tree_free(tree);
     git_signature_free(sig);
 
     git_commit* ret;
     lg2(git_commit_lookup(&ret, repo, &oid), "commit lookup");
+
+    if (branch_ref) {
+        std::string reflog_msg = "move forward branch " + std::string(git_reference_name(branch_ref)) + " to commit " + oid_str(oid);
+        git_reference* new_branch_ref;
+        lg2(git_reference_set_target(&new_branch_ref, branch_ref, &oid, reflog_msg.c_str()), "git_reference_set_target");
+        git_reference_free(new_branch_ref);
+    }
 
     return {ret};
 }
