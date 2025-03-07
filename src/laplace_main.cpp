@@ -222,22 +222,27 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
         }
         // case 3: branch exists and is currently the HEAD
         else {
-            git_reference* branch;
-            lg2(git_branch_lookup(&branch, repo, current_branch->c_str(), GIT_BRANCH_LOCAL), "look up current branch " + *current_branch);
+            git_reference* branch_head_ref;
+
+            std::string branch_head_name = "refs/heads/" + *current_branch;
+            lg2(git_reference_lookup(&branch_head_ref, repo, branch_head_name.c_str()), "look up current branch head" + branch_head_name);
             
-            const git_oid* parent_commit_oid = git_reference_target(branch);
+            // git_reference_resolve(&branch_head_ref, branch_head_ref);
+            // git_reference_set_target(&branch_head_ref, new_commit_oid, NULL);
+
+            const git_oid* parent_commit_oid = git_reference_target(branch_head_ref);
             if (!parent_commit_oid) { lg2(1, "git reference target" )}
 
             git_commit* parent_commit;
             git_commit_lookup(&parent_commit, repo, parent_commit_oid);
             
-            auto new_commit = create_new_commit(parent_commit, branch);
+            auto new_commit = create_new_commit(parent_commit, branch_head_ref);
             if (new_commit.has_value()) {
                 branches[*current_branch].push_back(*new_commit);
             }
 
             git_commit_free(parent_commit);
-            git_reference_free(branch);
+            git_reference_free(branch_head_ref);
         }
     }
 
@@ -359,12 +364,12 @@ std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_refere
     git_commit* ret;
     lg2(git_commit_lookup(&ret, repo, &oid), "commit lookup");
 
-    if (branch_ref) {
-        std::string reflog_msg = "move forward branch " + std::string(git_reference_name(branch_ref)) + " to commit " + oid_str(oid);
-        git_reference* new_branch_ref;
-        lg2(git_reference_set_target(&new_branch_ref, branch_ref, &oid, reflog_msg.c_str()), "git_reference_set_target");
-        git_reference_free(new_branch_ref);
-    }
+    // if (branch_ref) {
+    //     std::string reflog_msg = "move forward branch " + std::string(git_reference_name(branch_ref)) + " to commit " + oid_str(oid);
+    //     git_reference* new_branch_ref;
+    //     lg2(git_reference_set_target(&new_branch_ref, branch_ref, &oid, reflog_msg.c_str()), "git_reference_set_target");
+    //     git_reference_free(new_branch_ref);
+    // }
 
     return {ret};
 }
