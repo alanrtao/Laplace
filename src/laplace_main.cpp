@@ -98,6 +98,7 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
 
 std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
     git_libgit2_init();
+    git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
     defer([&shell]{
         kill(shell.pid, SIGKILL);
         for (auto& [b_ref, b_commits] : branches) {
@@ -272,15 +273,20 @@ std::expected<void, int> serialize_metadata(const metadata_t & msg)
     // |-------- v3
     // |---- k2
     // ...
+
     for (const auto& [k, vs] : msg.body) {
         std::string d_k = "/__laplace/" + k;
-        mkdir(d_k.c_str(), 0644);
+        mkdir(d_k.c_str(), 0777);
 
         for (const auto& [v, val] : vs) {
             std::string f_v = d_k + "/" + v;
-            int fd_v = open(f_v.c_str(), O_WRONLY);
-            std::cout << k << "[" << v << "]: " << val << std::endl;
-            write(fd_v, val.c_str(), val.size());
+            
+            int fd_v = open(f_v.c_str(), O_CREAT|O_WRONLY, 0666);
+            if (write(fd_v, val.c_str(), val.size()) < 0) {
+                std::string err = "write to " + f_v;
+                perror(err.c_str());
+            }
+
             close(fd_v);
         }
     }

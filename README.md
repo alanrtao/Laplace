@@ -10,4 +10,6 @@ effects (on files and variables) within the workspace is captured.
 
 ## Usage
 > For now, please clear the playground folder before running, since Laplace does not actually handle prior saves very well.
-- `mkdir playground`, then `docker run --rm -it -p 8008:8008/tcp -vplayground:/__laplace laplace`
+> You may need to run `sudo rm -r playground` since the Docker container has modified the folder as a different user, causing
+> it to be write-protected.
+- `mkdir playground`, then `docker run --rm -it -p 8008:8008/tcp -v./playground:/__laplace laplace`
