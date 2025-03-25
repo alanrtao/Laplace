@@ -30,7 +30,7 @@ git_revwalk* walk = NULL;
 std::vector<std::string> subcommands {};
 
 std::mutex data_lock;
-inline shell_t shell {};
+shell_t shell {};
 
 std::string oid_str(const git_oid& oid) {
     return std::string(git_oid_tostr_s(&oid));
@@ -59,6 +59,28 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
 std::expected<void, int> serialize_metadata(const metadata_t& msg);
 std::expected<void, int> apply_serialized_metadata();
 std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>& parents);
+
+struct laplace_state_resp {
+    std::string graph;
+    std::string current;
+    std::string error;
+ };
+std::expected<laplace_state_resp, int> fetch_state();
+std::string fetch_state_json() {
+    auto res = fetch_state();
+    res = res.value_or(laplace_state_resp {
+        .error = std::to_string(res.error())
+    });
+
+    auto wr = glz::write_json(*res);
+    std::string msg;
+    if (!wr) {
+        msg = std::string(wr.error().custom_error_message);
+    } else {
+        msg = *wr;
+    }
+    return msg;
+}
 
 // simplified from https://github.com/libgit2/libgit2/blob/21a351b0ed207d0871cb23e09c027d1ee42eae98/examples/common.c#L23
 void print_lg2_err(int error, const std::string& msg)
@@ -166,7 +188,7 @@ void web_socket_server()
     tls_opts.disable_hostname_validation = true;
 
     {
-        std::lock_guard<std::mutex> _(server_lock);
+        // std::lock_guard<std::mutex> _(server_lock);
 
         server.setTLSOptions(tls_opts);
         server.setOnClientMessageCallback(on_client_msg);
@@ -235,9 +257,10 @@ std::expected<std::unordered_map<std::string, std::string>, int> get_all_branch_
 
 std::expected<laplace_git_note, int> get_commit_note(const git_oid *commit)
 {
-   
     git_note *note_raw = NULL;
-    lg2(git_note_read(&note_raw, repo, git_note_namespace, commit), "read note from commit");
+    if (git_note_read(&note_raw, repo, git_note_namespace, commit) != 0) {
+        return std::unexpected(0);
+    }
     defer([note_raw]{git_note_free(note_raw);});
 
     laplace_git_note note;
@@ -269,8 +292,26 @@ std::expected<void, int> set_commit_note(const git_oid *oid, const laplace_git_n
     return {};
 }
 
+std::expected<void, int> init_laplace() {
+    const char* repo_path = "/__laplace";
+    if (git_repository_open(&repo, repo_path) == 0) {
+        std::cout << "Existing records found, scanning...\n";
+        // TODO: determine if there actually is any scanning needed
+    } else {
+        std::cout << "No existing records, creating new repository...\n";
+        init_repo(repo_path);
+    }
+
+    lg2(git_revwalk_new(&walk, repo), "create revision walker");
+    lg2(git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL), "git revwalk sorting");
+
+    return {};
+}
+
 std::expected<void, int> on_shell_msg(const std::string_view msg) {
-    std::lock_guard<std::mutex> lock(server_lock);
+    // std::lock_guard<std::mutex> _s(server_lock);
+    // std::lock_guard<std::mutex> _d(data_lock);
+
     glz::error_ctx json_err;
     int err;
 
@@ -293,21 +334,9 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
     else {
         serialize_metadata(update);
 
-        // case 1: no branches at all, starting from a blank repository
-        if (repo != NULL) {
-
-            const char* repo_path = "/__laplace";
-
-            if (git_repository_open(&repo, repo_path) == 0) {
-                std::cout << "Existing records found, scanning...\n";
-                // TODO: determine if there actually is any scanning needed
-            } else {
-                std::cout << "No existing records, creating new repository...\n";
-                init_repo(repo_path);
-            }
-
-            lg2(git_revwalk_new(&walk, repo), "create revision walker");
-            lg2(git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL), "git revwalk sorting");
+        // case 1: initial call, starting from a blank repository
+        if (!repo) {
+            return init_laplace();
         }
         // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD, when new changes
         //         are created, create a new branch along with a new note historoy
@@ -339,8 +368,9 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
         }
     }
 
+    std::string state_json = fetch_state_json();
     for (const auto& c : server.getClients()) {
-        c->send(std::string(msg));
+        c->send(state_json);
     }
 
     return {};
@@ -452,7 +482,6 @@ std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>
         subcommands_str.c_str(), tree, 
         parents.size(), (const git_commit**) parents.data()),
         "git_commit_create");
-    // std::cout << "Create new checkpoint commit " << oid_str(oid) << std::endl;
 
     git_tree_free(tree);
     git_signature_free(sig);
@@ -464,23 +493,16 @@ std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>
 }
 
 // Client API
-struct laplace_resp_fetch {
-   std::string graph;
-   std::string current;
-   std::string error;
-};
 
 std::expected<void, int> on_client_msg_jump(const git_oid& guid);
 std::expected<void, int> on_client_msg_label_branch(const std::string& branch);
 std::expected<void, int> on_client_msg_label_commit(const git_oid& commit);
-std::expected<laplace_resp_fetch, int> on_client_msg_fetch();
 
 std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket& ws, const ix::WebSocketMessagePtr& msg) {
     if (msg->type == ix::WebSocketMessageType::Open) {}
     else if (msg->type == ix::WebSocketMessageType::Message)
     {
         const auto& uri = msg->openInfo.uri; // todo: distinguish URI path
-        const std::lock_guard<std::mutex> lock(data_lock);
 
         client_req_t req;
         auto err = glz::read_json<client_req_t>(req, msg->str);
@@ -489,18 +511,11 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
             return std::unexpected((int)err.ec);
         }
 
-        if (req.endpoint == "fetch") {
-            auto res = on_client_msg_fetch();
-            res = res.value_or(laplace_resp_fetch {
-                .error = std::to_string(res.error())
-            });
+        // std::lock_guard<std::mutex> _s(server_lock);
+        // std::lock_guard<std::mutex> _d(data_lock);
 
-            auto wr = glz::write_json(*res);
-            if (!wr) {
-                ws.send(std::string(wr.error().custom_error_message));
-            } else {
-                ws.send(*wr);
-            }
+        if (req.endpoint == "fetch") {
+            ws.send(fetch_state_json());
         }
         else if (req.endpoint == "jump") {
             on_client_msg_jump(str_oid(req.params));
@@ -517,7 +532,6 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
 }
 
 std::expected<void, int> on_client_msg_jump(const git_oid& oid) {
-    std::lock_guard<std::mutex> lock(data_lock);
     git_commit* commit;
     lg2(git_commit_lookup(&commit, repo, &oid), "git commit lookup");
     lg2(git_reset(repo, (git_object*) commit, GIT_RESET_HARD, NULL), "git reset");
@@ -535,7 +549,7 @@ std::expected<void, int> on_client_msg_label_commit(const git_oid &commit)
     return {};
 }
 
-std::expected<laplace_resp_fetch, int> on_client_msg_fetch()
+std::expected<laplace_state_resp, int> fetch_state()
 {
     auto graph = render_mermaid();
     abortif(graph);
@@ -543,14 +557,16 @@ std::expected<laplace_resp_fetch, int> on_client_msg_fetch()
     git_oid head_commit;
     git_reference_name_to_id(&head_commit, repo, "HEAD");
 
-    return laplace_resp_fetch {
+    return laplace_state_resp {
         .graph = *graph,
         .current = oid_str(head_commit)
     };
 }
 
 std::expected<std::string, int> render_mermaid() {
-    std::lock_guard<std::mutex> lock(data_lock);
+    if (!repo) {
+        abortif(init_laplace());
+    }
 
     lg2(git_revwalk_push_glob(walk, "*"), "git revwalk reset");
 
@@ -559,7 +575,7 @@ std::expected<std::string, int> render_mermaid() {
 
     std::unordered_map<std::string, int> branch_encounter_order {};
 
-    while (git_revwalk_next(&oid, walk) == 0) {
+    while (!git_revwalk_next(&oid, walk)) {
         // https://mermaid.js.org/syntax/gitgraph.html
         laplace_git_note note = get_commit_note(&oid).value_or(laplace_git_note{});
         
