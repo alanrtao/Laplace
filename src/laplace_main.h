@@ -12,3 +12,4 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& shell) noexc
 std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept;
 
 void web_socket_server();
+void shell_listener(int sock_fd);

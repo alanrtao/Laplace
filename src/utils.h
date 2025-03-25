@@ -21,7 +21,8 @@ struct _defer {
 #define ERRNO std::string(std::strerror(errno))
 
 #define throw(str) return std::unexpected((str) + "\n")
-#define throwif(expected) { if (!expected) { throw(std::to_string(expected.error())); } }
+#define abortif(expected) { if (!expected) { return std::unexpected((expected).error()); } }
+#define throwif(expected) { if (!expected) { throw(std::to_string((expected).error())); } }
 
 inline std::string read_file_descriptor(const int fd) {
     std::string result {};

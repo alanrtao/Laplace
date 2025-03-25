@@ -19,12 +19,14 @@
 
     <script type="text/javascript">document.addEventListener('DOMContentLoaded', function() {
         function render(state) {
+
+            console.log(state);
+
             // https://mermaid.js.org/syntax/gitgraph.html
             var vcsContainer = document.getElementById("diagram");
 
             var str = "gitGraph TB:\n";
-            vcsContainer.innerText = str + state.graph;
-
+            vcsContainer.innerHTML = str + state.graph;
             // TODO: add state.current
         }
     

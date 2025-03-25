@@ -2,6 +2,7 @@
 #include <filesystem>
 #include <thread>
 #include <stacktrace>
+#include <set>
 
 #include "unistd.h"
 #include "sys/socket.h"
@@ -20,7 +21,7 @@ ix::WebSocketServer server(8008, "0.0.0.0");
 std::mutex server_lock;
 
 struct laplace_git_note {
-    std::string branch;
+    std::string branch; // do not allow multiple branches coexisting on the same commit
     std::string comments;
 };
 
@@ -57,7 +58,7 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
 
 std::expected<void, int> serialize_metadata(const metadata_t& msg);
 std::expected<void, int> apply_serialized_metadata();
-std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_reference* branch_ref);
+std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>& parents);
 
 // simplified from https://github.com/libgit2/libgit2/blob/21a351b0ed207d0871cb23e09c027d1ee42eae98/examples/common.c#L23
 void print_lg2_err(int error, const std::string& msg)
@@ -108,13 +109,12 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
         git_revwalk_free(walk);
         git_repository_free(repo);
         git_libgit2_shutdown();
+        server.stop();
     });
 
     auto t_wait = std::thread([&shell](){
         while(waitpid(shell.pid, NULL, 0) != shell.pid);
         std::cerr << "Shell terminated\n";
-        server.stop();
-        std::exit(0);
     });
 
     auto t_wss = std::thread(web_socket_server);
@@ -140,6 +140,14 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
         throw("Bind socket: " + ERRNO);
     }
 
+    auto t_sl = std::thread([sock_fd]{ shell_listener(sock_fd); });
+
+    t_wait.join();
+
+    return {};
+}
+
+void shell_listener(int sock_fd) {
     std::array<char, 1 * 1024 * 1024> buf {};
     while (true) {
         int n = recvfrom(sock_fd, buf.data(), 1024 * 1024, 0, NULL, NULL);
@@ -149,8 +157,6 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
             std::cerr << "recvfrom" + ERRNO << "\n";
         }
     }
-
-    return {};
 }
 
 void web_socket_server()
@@ -181,10 +187,15 @@ void web_socket_server()
 
 std::expected<void, int> init_repo(const char* repo_path) {
     lg2(git_repository_init(&repo, repo_path, 0), "create repository");
-    create_new_commit(NULL, NULL).and_then([](git_commit* commit) -> std::expected<void, int> {
+    return create_new_commit({ nullptr }).and_then([](git_commit* commit) -> std::expected<void, int> {
         git_reference* branch;
         lg2(git_branch_create(&branch, repo, "main", commit, 0), "git branch create");
         lg2(git_repository_set_head(repo, "refs/heads/main"), "git repository set head"); // refs/heads is automatically used
+
+        set_commit_note(git_commit_id(commit), {
+            .branch = "main"
+        });
+
         git_reference_free(branch);
         return {};
     }); // head at new commit
@@ -243,7 +254,7 @@ std::expected<void, int> set_commit_note(const git_oid *oid, const laplace_git_n
 {
     auto json = glz::write_json(note);
 
-    if (!json.has_value()) {
+    if (!json) {
         std::cerr << json.error().custom_error_message << "\n";
         return std::unexpected(0);
     }
@@ -254,6 +265,8 @@ std::expected<void, int> set_commit_note(const git_oid *oid, const laplace_git_n
 
     git_oid note_oid;
     lg2(git_note_create(&note_oid, repo, git_note_namespace, sig, sig, oid, json->c_str(), 1 /* force */), "create or update commit note");
+
+    return {};
 }
 
 std::expected<void, int> on_shell_msg(const std::string_view msg) {
@@ -296,7 +309,8 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
             lg2(git_revwalk_new(&walk, repo), "create revision walker");
             lg2(git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL), "git revwalk sorting");
         }
-        // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD
+        // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD, when new changes
+        //         are created, create a new branch along with a new note historoy
         else if (git_repository_head_detached(repo)) {
 
             // git_repository_head(, repo);
@@ -305,7 +319,7 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
             // git_branch_create(&branch, repo, ("b" + std::to_string(branches.size())).c_str(), commit, 0);
             // branches[branch] = { commit };
         }
-        // case 3: branch exists and is currently the HEAD
+        // case 3: branch exists and is currently the HEAD, keep reusing the parent's note history
         else {
             git_reference* branch_head_ref;
 
@@ -314,10 +328,13 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
                     git_commit_free(parent);
                 });
 
-                auto new_commit = create_new_commit(parent, branch_head_ref);
-                if (!new_commit.has_value()) {
-                    return std::unexpected(new_commit.error());
-                }
+                return create_new_commit({parent}).and_then([parent](git_commit* commit) {
+                    auto parent_note = get_commit_note(git_commit_id(parent)).value_or(laplace_git_note{});
+
+                    return set_commit_note(git_commit_id(commit), {
+                        .branch = parent_note.branch
+                    });
+                });
             });
         }
     }
@@ -406,7 +423,7 @@ std::expected<void, int> apply_serialized_metadata()
     return {};
 }
 
-std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_reference* branch_ref)
+std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>& parents)
 {
     int err;
 
@@ -430,7 +447,11 @@ std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_refere
     }
 
     // https://libgit2.org/docs/examples/init/
-    lg2(git_commit_create_v(&oid, repo, "HEAD", sig, sig, NULL, subcommands_str.c_str(), tree, 1, parent), "git_commit_create");
+    lg2(git_commit_create(
+        &oid, repo, "HEAD", sig, sig, NULL, 
+        subcommands_str.c_str(), tree, 
+        parents.size(), (const git_commit**) parents.data()),
+        "git_commit_create");
     // std::cout << "Create new checkpoint commit " << oid_str(oid) << std::endl;
 
     git_tree_free(tree);
@@ -439,20 +460,20 @@ std::expected<git_commit*, int> create_new_commit(git_commit* parent, git_refere
     git_commit* ret;
     lg2(git_commit_lookup(&ret, repo, &oid), "commit lookup");
 
-    // if (branch_ref) {
-    //     std::string reflog_msg = "move forward branch " + std::string(git_reference_name(branch_ref)) + " to commit " + oid_str(oid);
-    //     git_reference* new_branch_ref;
-    //     lg2(git_reference_set_target(&new_branch_ref, branch_ref, &oid, reflog_msg.c_str()), "git_reference_set_target");
-    //     git_reference_free(new_branch_ref);
-    // }
-
     return {ret};
 }
 
 // Client API
+struct laplace_resp_fetch {
+   std::string graph;
+   std::string current;
+   std::string error;
+};
+
 std::expected<void, int> on_client_msg_jump(const git_oid& guid);
 std::expected<void, int> on_client_msg_label_branch(const std::string& branch);
 std::expected<void, int> on_client_msg_label_commit(const git_oid& commit);
+std::expected<laplace_resp_fetch, int> on_client_msg_fetch();
 
 std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> connectionState, ix::WebSocket& ws, const ix::WebSocketMessagePtr& msg) {
     if (msg->type == ix::WebSocketMessageType::Open) {}
@@ -469,18 +490,17 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
         }
 
         if (req.endpoint == "fetch") {
-            ws.send("received client fetch");
-            // auto json = glz::write_json();
-            // if (json.has_value()) {
-            //     ws.send(*json);
-            // }
-            
-            render_mermaid().and_then([&ws](const std::string& rendering) -> std::expected<void, int> {
-                ws.send(rendering);
-                return {};
-            }).or_else([&ws](const int& error) {
-                ws.send("ERROR " + std::to_string(error));
+            auto res = on_client_msg_fetch();
+            res = res.value_or(laplace_resp_fetch {
+                .error = std::to_string(res.error())
             });
+
+            auto wr = glz::write_json(*res);
+            if (!wr) {
+                ws.send(std::string(wr.error().custom_error_message));
+            } else {
+                ws.send(*wr);
+            }
         }
         else if (req.endpoint == "jump") {
             on_client_msg_jump(str_oid(req.params));
@@ -515,16 +535,50 @@ std::expected<void, int> on_client_msg_label_commit(const git_oid &commit)
     return {};
 }
 
+std::expected<laplace_resp_fetch, int> on_client_msg_fetch()
+{
+    auto graph = render_mermaid();
+    abortif(graph);
+
+    git_oid head_commit;
+    git_reference_name_to_id(&head_commit, repo, "HEAD");
+
+    return laplace_resp_fetch {
+        .graph = *graph,
+        .current = oid_str(head_commit)
+    };
+}
+
 std::expected<std::string, int> render_mermaid() {
     std::lock_guard<std::mutex> lock(data_lock);
 
     lg2(git_revwalk_push_glob(walk, "*"), "git revwalk reset");
 
-    std::vector<git_oid> topo {};
     git_oid oid;
+    std::string mermaid;
+
+    std::unordered_map<std::string, int> branch_encounter_order {};
+
     while (git_revwalk_next(&oid, walk) == 0) {
-        topo.push_back(oid);
+        // https://mermaid.js.org/syntax/gitgraph.html
+        laplace_git_note note = get_commit_note(&oid).value_or(laplace_git_note{});
+        
+        if (!branch_encounter_order.contains(note.branch)) {
+            branch_encounter_order.emplace(note.branch, branch_encounter_order.size());
+            mermaid.append("\tbranch " + note.branch + "\n");
+        }
+
+        std::string message = "";
+        if (git_commit* commit; git_commit_lookup(&commit, repo, &oid) == 0) {
+            message = std::string(git_commit_message(commit));
+        }
+
+        mermaid.append("\tcheckout " + note.branch + "\n"); // force checkout for implementation convenience
+        mermaid.append("\tcommit\n");
+        mermaid.append("\t\tid:\"" + oid_str(oid) + "\"\n");
+        mermaid.append("\t\tmessage:\"" + message + "\"\n");
+        mermaid.append("\t\ttag:\"" + note.comments + "\"\n");
     }
 
-    return str;
+    return mermaid;
 }
