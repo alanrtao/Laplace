@@ -205,17 +205,21 @@ void web_socket_server()
 }
 
 std::expected<void, int> init_repo(const char* repo_path) {
-    lg2(git_repository_init(&repo, repo_path, 0), "create repository");
+    git_repository_init_options opts = GIT_REPOSITORY_INIT_OPTIONS_INIT;
+    opts.mode = GIT_REPOSITORY_INIT_SHARED_ALL;
+    opts.initial_head = "main";
+    opts.description = "Repository managed by Laplace, with versions corresponding to Bash commands";
+    lg2(git_repository_init_ext(&repo, repo_path, &opts), "create repository");
     return create_new_commit({ nullptr }).and_then([](git_commit* commit) -> std::expected<void, int> {
-        git_reference* branch;
-        lg2(git_branch_create(&branch, repo, "main", commit, 0), "git branch create");
-        lg2(git_repository_set_head(repo, "refs/heads/main"), "git repository set head"); // refs/heads is automatically used
+        // git_reference* branch;
+        // lg2(git_branch_create(&branch, repo, "main", commit, 0), "git branch create");
+        // lg2(git_repository_set_head(repo, "refs/heads/main"), "git repository set head"); // refs/heads is automatically used
 
         set_commit_note(git_commit_id(commit), {
             .branch = "main"
         });
 
-        git_reference_free(branch);
+        // git_reference_free(branch);
         return {};
     }); // head at new commit
 }
@@ -327,7 +331,7 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
 
         // case 1: initial call, starting from a blank repository
         if (!repo) {
-            return init_laplace();
+            init_laplace();
         }
         // case 2: branches exist, but user jumped back to prior commit, causing a detached HEAD, when new changes
         //         are created, create a new branch along with a new note historoy
@@ -339,7 +343,27 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
             // git_branch_create(&branch, repo, ("b" + std::to_string(branches.size())).c_str(), commit, 0);
             // branches[branch] = { commit };
 
-            std::cerr << "DETACHED!!!" << std::endl;
+            get_head_commit().and_then([](git_commit* parent) {
+                defer([parent]{
+                    git_commit_free(parent);
+                });
+
+                return create_new_commit({parent}).and_then([parent](git_commit* commit) -> std::expected<void, int> {
+                    auto oid = git_commit_id(commit);
+                    std::string branch_name = "branch_" + oid_str(*oid).substr(0, 6);
+                    std::string branch_ref_name = "refs/heads/" + branch_name;
+
+                    git_reference* branch;
+                    lg2(git_branch_create(&branch, repo, branch_name.c_str(), commit, 0), "git branch create");
+                    lg2(git_repository_set_head(repo, branch_ref_name.c_str()), "git repository set head"); // refs/heads is automatically used
+
+                    auto parent_note = get_commit_note(git_commit_id(parent)).value_or(laplace_git_note{});
+
+                    return set_commit_note(git_commit_id(commit), {
+                        .branch = branch_name
+                    });
+                });
+            });
         }
         // case 3: branch exists and is currently the HEAD, keep reusing the parent's note history
         else {
@@ -359,9 +383,10 @@ std::expected<void, int> on_shell_msg(const std::string_view msg) {
                 });
             });
         }
-    }
 
-    broadcast_state();
+        subcommands.clear();
+        broadcast_state();
+    }
 
     return {};
 }
@@ -507,10 +532,10 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
         else if (req.endpoint == "jump") {
             on_client_msg_jump(str_oid(req.params));
         }
-        else if (req.endpoint == "relable branch") {
+        else if (req.endpoint == "annotate branch") {
             
         }
-        else if (req.endpoint == "relable commit") {
+        else if (req.endpoint == "annotate commit") {
 
         }
     }
@@ -519,14 +544,36 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
 }
 
 std::expected<void, int> on_client_msg_jump(const git_oid& oid) {
-    git_commit* commit;
+    // git_commit* commit;
 
-    lg2(git_commit_lookup(&commit, repo, &oid), "git commit lookup");
-    lg2(git_reset(repo, (git_object*) commit, GIT_RESET_HARD, NULL), "git reset");
-    lg2(git_repository_set_head_detached(repo, &oid), "jump back to " + oid_str(oid));
+    // lg2(git_commit_lookup(&commit, repo, &oid), "git commit lookup");
+    // TODO: find other way to set file state
+    // lg2(git_reset(repo, (git_object*) commit, GIT_RESET_HARD, NULL), "git reset");
+
+    // jump right onto a branch ref, then just use that branch ref
+    auto jump_to_branch = get_all_branch_tips().and_then(
+        [&oid](const std::unordered_map<std::string, std::string> tips) -> std::expected<void, int> {
+        for (const auto& [branch, commit] : tips) {
+            git_oid commit_oid = str_oid(commit);
+            if (git_oid_cmp(&commit_oid, &oid) == 0) {
+                // std::cout << "jumping to branch head: " << branch << " -> " << oid_str(oid) << std::endl;
+                git_repository_set_head(repo, branch.c_str());
+                return {};
+            }
+        }
+        return std::unexpected(0);
+    });
+
+    // jumped to a non-ref commit, then detach
+    if (!jump_to_branch) {
+        // std::cout << "jump detached: " << oid_str(oid) << std::endl;
+        lg2(git_repository_set_head_detached(repo, &oid), "jump back to " + oid_str(oid));
+    }
 
     broadcast_state();
-    return apply_serialized_metadata();
+
+    return {};
+    // return apply_serialized_metadata(); // TODO: fix this, this is causing halting after jump
 }
 
 std::expected<void, int> on_client_msg_label_branch(const std::string &branch)
@@ -552,7 +599,26 @@ std::expected<laplace_state_resp, int> render_mermaid() {
     git_revwalk* walk;
     lg2(git_revwalk_new(&walk, repo), "create revision walker");
     defer([walk]{ git_revwalk_free(walk); });
-    lg2(git_revwalk_push_glob(walk, "*"), "git revwalk reset");
+
+    git_branch_iterator* b_itr;
+    lg2(git_branch_iterator_new(&b_itr, repo, GIT_BRANCH_LOCAL), "branch iterator new");
+    defer([b_itr]{ git_branch_iterator_free(b_itr); });
+
+    // TODO: finish debugging this
+    // get_all_branch_tips().and_then([](const std::unordered_map<std::string, std::string>& tips) -> std::expected<void, int> {
+    //     for (const auto& [k, v] : tips) {
+    //         std::cout << k << " -> " << v << std::endl;
+    //     }
+
+    //     return {};
+    // });
+
+    git_reference* curr_branch_ref;
+    git_branch_t curr_branch_type;
+    while(git_branch_next(&curr_branch_ref, &curr_branch_type, b_itr) != GIT_ITEROVER) {
+        git_revwalk_push_ref(walk, git_reference_name(curr_branch_ref));
+    }
+
     lg2(git_revwalk_hide_glob(walk, "notes"), "git revwalk hide notes)");
     lg2(git_revwalk_sorting(walk, GIT_SORT_TOPOLOGICAL | GIT_SORT_REVERSE), "git revwalk sorting");
 
