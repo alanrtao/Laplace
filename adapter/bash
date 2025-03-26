@@ -43,7 +43,6 @@ function __laplace_precommand() {
   # the command itself without diffing the shell state
   echo "$BASH_COMMAND" | /bin/laplace
 }
-trap "__laplace_precommand" DEBUG
 
 function __laplace_flush() {
 
@@ -103,7 +102,9 @@ function __laplace_postcommand() {
   exec 2221< <(while IFS="" read A; do printf $A=; alias $A; printf "\0"; done < <(compgen -a))
   exec 2222< <(printf "_="; shopt -p) # don't break shopt output, there's no point
   exec 2223< <(while IFS="" read F; do printf $(echo $F | cut -c 12-)=; $F; printf "\0"; done < <(declare -F))
+  
   trap __laplace_flush SIGUSR1
+  trap "__laplace_precommand" DEBUG
 }
 PROMPT_COMMAND="__laplace_postcommand"
 

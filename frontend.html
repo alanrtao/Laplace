@@ -2,7 +2,7 @@
 <head>
 
   <link href="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.css" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script>
+  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script> -->
   <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
  
@@ -10,65 +10,136 @@
   <link href="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.css" rel="stylesheet" type="text/css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.2/d3.min.js" charset="utf-8"></script>
   <script src="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.js"></script>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+
+  <style type="text/css">
+    .atkinson-hyperlegible-regular {
+    font-family: "Atkinson Hyperlegible", sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    }
+
+    .atkinson-hyperlegible-bold {
+    font-family: "Atkinson Hyperlegible", sans-serif;
+    font-weight: 700;
+    font-style: normal;
+    }
+
+    .atkinson-hyperlegible-regular-italic {
+    font-family: "Atkinson Hyperlegible", sans-serif;
+    font-weight: 400;
+    font-style: italic;
+    }
+
+    .atkinson-hyperlegible-bold-italic {
+    font-family: "Atkinson Hyperlegible", sans-serif;
+    font-weight: 700;
+    font-style: italic;
+    }
+  </style>
 </head>
-<body>
+<body class="atkinson-hyperlegible-regular">
 
-    <div class="mermaid" id="diagram">
-    
-    </div>
+    <div class="mermaid" id="diagram"></div>
 
-    <script type="text/javascript">document.addEventListener('DOMContentLoaded', function() {
-        function render(state) {
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script src="https://unpkg.com/tippy.js@6"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
 
-            console.log(state);
+        mermaid.initialize({ startOnLoad: true });
+        document.addEventListener('DOMContentLoaded', function() {
+            mermaid.initialize({ startOnLoad: true, securityLevel: 'loose',});
 
-            // https://mermaid.js.org/syntax/gitgraph.html
-            var vcsContainer = document.getElementById("diagram");
+            function render(state) {
+                console.log(state)
+                // https://mermaid.js.org/syntax/gitgr
+                const drawDiagram = async function () {
+                    var element = document.querySelector('#diagram');
+                    const graphDefinition = "gitGraph TB:\n" + state.graph;
+                    // console.log(graphDefinition);
+                    const { svg, bindFunctions } = await mermaid.render('graphDiv', graphDefinition);
+                    element.innerHTML = svg;
+                    if (bindFunctions) {
+                        bindFunctions(element);
+                    }
+                    document.querySelectorAll("#diagram .commit").forEach(element => {
+                        element.classList.forEach(cls => {
+                            if (!cls.startsWith('commit')) { // all stylistic attrs start with class, the commit ID is just alone 
+                                
+                                var annotation = document.createElement('div');
+                                annotation.innerText = state.messages[cls];
 
-            var str = "gitGraph TB:\n";
-            vcsContainer.innerHTML = str + state.graph;
-            // TODO: add state.current
-        }
-    
-        function connectToServer(url) {
-            let socket = new WebSocket(url);
-    
-            socket.onopen = () => {
-                webSocketMsgOnce({ endpoint:"fetch", params:"" }).then((msg) => {
-                    render(JSON.parse(msg.data))
+                                var jump_to = document.createElement('button');
+                                jump_to.onclick = (ev) => {
+                                    console.log("jump to" + state.oids[cls]);
+                                    webSocketMsgOnce({ endpoint: "jump", params: state.oids[cls] })
+                                }
+                                jump_to.innerText = "jump to commit";
+                                annotation.appendChild(jump_to);
+
+                                // https://atomiks.github.io/tippyjs/
+                                // list of params
+                                // https://atomiks.github.io/tippyjs/v6/all-props
+                                tippy(element, { 
+                                    content: annotation, 
+                                    appendTo: () => document.body,
+                                    animation: 'shift-away',
+                                    placement: 'right',
+                                    interactive: true,
+                                    allowHTML: true,
+                                    });
+                            }
+                        })
+                    })
+                };
+
+                drawDiagram();
+            }
+        
+            function connectToServer(url) {
+                let socket = new WebSocket(url);
+        
+                socket.onopen = () => {
+                    webSocketMsgOnce({ endpoint:"fetch", params:"" }).then((msg) => {
+                        render(JSON.parse(msg.data))
+                    });
+                }
+        
+                socket.onmessage = (msg) => render(JSON.parse(msg.data));
+        
+                socket.onclose = () => {
+                    console.log("WebSocket closed, retrying in 1 second...");
+                    setTimeout(() => connectToServer(url), 1000);
+                };
+        
+                socket.onerror = (error) => console.error("WebSocket error:", error);
+            }
+        
+            function webSocketMsgOnce(req) {
+                return new Promise((resolve, reject) => {
+                    let socket = new WebSocket("ws://localhost:8008");
+        
+                    socket.onopen = () => {
+                        socket.send(JSON.stringify(req));
+                    }
+        
+                    socket.onmessage = (e) => {
+                        resolve(e);
+                        socket.close();
+                    }
+        
+                    socket.onerror = (e) => {
+                        reject(e);
+                    }
                 });
             }
-    
-            socket.onmessage = (msg) => render(JSON.parse(msg.data));
-    
-            socket.onclose = () => {
-                console.log("WebSocket closed, retrying in 1 second...");
-                setTimeout(() => connectToServer(url), 1000);
-            };
-    
-            socket.onerror = (error) => console.error("WebSocket error:", error);
-        }
-    
-        function webSocketMsgOnce(req) {
-            return new Promise((resolve, reject) => {
-                let socket = new WebSocket("ws://localhost:8008");
-    
-                socket.onopen = () => {
-                    socket.send(JSON.stringify(req));
-                }
-    
-                socket.onmessage = (e) => {
-                    resolve(e);
-                    socket.close();
-                }
-    
-                socket.onerror = (e) => {
-                    reject(e);
-                }
-            });
-        }
-    
-        connectToServer("ws://localhost:8008");
-    });</script>
+        
+            connectToServer("ws://localhost:8008");
+        });
+    </script>
 </body>
 </html>
