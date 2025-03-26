@@ -12,4 +12,6 @@ effects (on files and variables) within the workspace is captured.
 - Laplace saves progress to the `./playground` folder (you can switch to different names in the code below)
 - `docker run --rm -it -p 8008:8008/tcp -v./playground:/__laplace laplace`
   - To delete this progress, do `sudo rm -rf ./playground` in the host
+- Once the Docker environment began, open the frontend webpage HTML, you can now interact with the Laplace process by clicking on the
+  commit diagram presented on the frontend.
 - To exit shell, call `Ctrl + D`
