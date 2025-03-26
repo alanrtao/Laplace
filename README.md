@@ -9,8 +9,7 @@ effects (on files and variables) within the workspace is captured.
 - `mkdir build`, `cd build`, `CC=clang CXX=clang++ cmake ..`, `make -j`
 
 ## Usage
-> For now, please clear the playground folder before running, since Laplace does not actually handle prior saves very well.
-> You may need to run `sudo rm -r playground` since the Docker container has modified the folder as a different user, causing
-> it to be write-protected.
-- `mkdir playground`, then `docker run --rm -it -p 8008:8008/tcp -v./playground:/__laplace laplace`
+- Laplace saves progress to the `./playground` folder (you can switch to different names in the code below)
+- `docker run --rm -it -p 8008:8008/tcp -v./playground:/__laplace laplace`
+  - To delete this progress, do `sudo rm -rf ./playground` in the host
 - To exit shell, call `Ctrl + D`
