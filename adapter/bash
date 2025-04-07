@@ -45,6 +45,7 @@ function __laplace_precommand() {
 }
 
 function __laplace_flush() {
+  return 0 # TODO: remove
 
   srcf=$(mktemp)
 

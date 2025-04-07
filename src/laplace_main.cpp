@@ -475,15 +475,18 @@ std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>
     git_oid oid;
     git_signature* sig;
     lg2(git_signature_now(&sig, "_", "_@laplace.com"), "git_signature_now");
+    defer([sig]{ git_signature_free(sig); });
 
     git_index *index;
     git_oid tree_id;
     git_tree *tree;
     lg2(git_repository_index(&index, repo), "git_repository_index");
     lg2(git_index_add_all(index, NULL, 0, NULL, NULL), "git_index_add_all");
+    lg2(git_index_write(index), "git_index_write");
+    defer([index]{ git_index_free(index); });
     lg2(git_index_write_tree(&tree_id, index), "git_index_write_tree");
     lg2(git_tree_lookup(&tree, repo, &tree_id), "look up actual tree obj from tree_id");
-    git_index_free(index);
+    defer([tree]{ git_tree_free(tree); });
 
     std::string subcommands_str = "";
     for (const auto& subcommand : subcommands) {
@@ -497,9 +500,6 @@ std::expected<git_commit*, int> create_new_commit(const std::vector<git_commit*>
         subcommands_str.c_str(), tree, 
         parents.size(), (const git_commit**) parents.data()),
         "git_commit_create");
-
-    git_tree_free(tree);
-    git_signature_free(sig);
 
     git_commit* ret;
     lg2(git_commit_lookup(&ret, repo, &oid), "commit lookup");
@@ -543,12 +543,39 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
     return {};
 }
 
-std::expected<void, int> on_client_msg_jump(const git_oid& oid) {
-    // git_commit* commit;
 
-    // lg2(git_commit_lookup(&commit, repo, &oid), "git commit lookup");
-    // TODO: find other way to set file state
-    // lg2(git_reset(repo, (git_object*) commit, GIT_RESET_HARD, NULL), "git reset");
+int checkout_notify_cb(
+    git_checkout_notify_t why,
+    const char *path,
+    const git_diff_file *baseline,
+    const git_diff_file *target,
+    const git_diff_file *workdir,
+    void *payload)
+{
+    (void)baseline;
+    (void)target;
+    (void)workdir;
+    (void)payload;
+
+    if (why & GIT_CHECKOUT_NOTIFY_CONFLICT) {
+        printf("Conflict detected in file: %s\n", path);
+    }
+
+    return 0;
+}
+
+std::expected<void, int> on_client_msg_jump(const git_oid& oid) {
+    git_checkout_options opts;
+    lg2(git_checkout_options_init(&opts, GIT_CHECKOUT_OPTIONS_VERSION), "git checkout options init");
+    opts.checkout_strategy = GIT_CHECKOUT_SAFE;
+    opts.notify_cb = &checkout_notify_cb;
+
+    git_object *target_commit = NULL;
+
+    lg2(git_object_lookup(&target_commit, repo, &oid, GIT_OBJECT_COMMIT), "git object lookup");
+    defer([target_commit]{ git_object_free(target_commit); });
+
+    lg2(git_checkout_tree(repo, target_commit, &opts), "git checkout tree");
 
     // jump right onto a branch ref, then just use that branch ref
     auto jump_to_branch = get_all_branch_tips().and_then(
@@ -603,15 +630,6 @@ std::expected<laplace_state_resp, int> render_mermaid() {
     git_branch_iterator* b_itr;
     lg2(git_branch_iterator_new(&b_itr, repo, GIT_BRANCH_LOCAL), "branch iterator new");
     defer([b_itr]{ git_branch_iterator_free(b_itr); });
-
-    // TODO: finish debugging this
-    // get_all_branch_tips().and_then([](const std::unordered_map<std::string, std::string>& tips) -> std::expected<void, int> {
-    //     for (const auto& [k, v] : tips) {
-    //         std::cout << k << " -> " << v << std::endl;
-    //     }
-
-    //     return {};
-    // });
 
     git_reference* curr_branch_ref;
     git_branch_t curr_branch_type;
