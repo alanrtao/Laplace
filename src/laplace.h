@@ -20,6 +20,7 @@ struct opts_msgr_t {
 };
 
 inline const std::string laplace_socket_path = "/tmp/laplace.sock";
+inline const std::string laplace_socket_reciprical_path = "/tmp/laplace_.sock";
 inline const std::string env_var_socket = "LAPLACE_FD";
 
 void main_mode(const opts_main_t& opts);

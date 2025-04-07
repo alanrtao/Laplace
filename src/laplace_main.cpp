@@ -28,6 +28,8 @@ git_repository* repo = NULL;
 std::vector<std::string> subcommands {};
 
 shell_t shell {};
+bool pending_restart = false;
+opts_main_t shell_launch_opts;
 
 std::string oid_str(const git_oid& oid) {
     return std::string(git_oid_tostr_s(&oid));
@@ -98,6 +100,9 @@ void print_lg2_err(int error, const std::string& msg)
 #define lg2(e, msg) { if (auto __v = (e); __v) { print_lg2_err(__v, (msg)); return std::unexpected(__v); } }
 
 std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexcept {
+    shell_launch_opts = opts;
+
+    // recursive definition for restarting the shell, i.e. just do this exact same function call again
     const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
     if (!std::filesystem::exists(adapter)) {
         throw("Adapter not found: " + adapter);
@@ -119,6 +124,8 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
             NULL
         };
 
+        std::cerr << "Shell launched!" << std::endl;
+
         execve(opts.frontend_path.c_str(), argv, NULL);
 
         throw("Execute shell failure: " + ERRNO);
@@ -128,21 +135,6 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
 }
 
 std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
-    git_libgit2_init();
-    git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
-    defer([&shell]{
-        kill(shell.pid, SIGKILL);
-        git_repository_free(repo);
-        git_libgit2_shutdown();
-        server.stop();
-    });
-
-    auto t_wait = std::thread([&shell](){
-        while(waitpid(shell.pid, NULL, 0) != shell.pid);
-        std::cerr << "Shell terminated\n";
-    });
-
-    auto t_wss = std::thread(web_socket_server);
 
     /* Create socket from which to read. */
     int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -165,10 +157,41 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
         throw("Bind socket: " + ERRNO);
     }
 
+    /* Local socket listener thread */
     auto t_sl = std::thread([sock_fd]{ shell_listener(sock_fd); });
 
-    t_wait.join();
+    // Git setup
+    git_libgit2_init();
+    git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
+    defer([&shell]{
+        kill(shell.pid, SIGKILL);
+        git_repository_free(repo);
+        git_libgit2_shutdown();
+        server.stop();
+    });
+    // preventing cold-start hanging issue by force running render function at least once
+    render_mermaid();
 
+    /* Web socket server thread */
+    auto t_wss = std::thread(web_socket_server);
+
+    /* Shell monitoring and restart thread (i.e. main thread) */
+    while (true) {
+        auto t_wait = std::thread([&shell]{
+            while(waitpid(shell.pid, NULL, 0) != shell.pid);
+            std::cerr << "Shell terminated\n";
+        });
+    
+        t_wait.join();
+
+        if (pending_restart) {
+            pending_restart = false;
+            std::cerr << "Restarting shell to reflect environment changes...\n";
+            launch_shell(shell_launch_opts);
+        } else {
+            break;
+        }
+    }
     return {};
 }
 
@@ -423,48 +446,9 @@ std::expected<void, int> serialize_metadata(const metadata_t & msg)
 
 std::expected<void, int> apply_serialized_metadata()
 {
-    // - __laplace
-    // |---- k1
-    // |-------- v1
-    // |-------- v2
-    // |-------- v3
-    // |---- k2
-    // ...
-
-    // each of k will be written to one tempfile called /tmp/__laplace_{k}
-    // containing v1, v2, ... separated by \0
-
-    // write each metadata type into a single temp file
-    for (auto& k_ent : std::filesystem::directory_iterator("/__laplace")) {
-        if (!k_ent.is_directory()) { continue; }
-
-        auto k = k_ent.path().filename().string();
-
-        // skip hidden folders such as .git
-        if (k[0] == '.') {
-            continue;
-        }
-
-        std::string f_dst = "/tmp/__laplace_" + k;
-        int fd_dst = open(f_dst.c_str(), O_WRONLY | O_APPEND);
-
-        for (auto& v_ent : std::filesystem::directory_iterator(k_ent.path()) ) {
-            auto v = v_ent.path();
-            int fd_src = open(v.c_str(), O_RDONLY);
-            struct stat stat_buf;
-            fstat(fd_src,&stat_buf);
-
-            sendfile(fd_dst, fd_src, NULL, stat_buf.st_size);
-
-            close(fd_src);
-            write(fd_dst, "\0", 1);
-        }
-
-        close(fd_dst);
-    }
-
-    kill(shell.pid, SIGUSR1);
-
+    // Due to lazy handling of Bash signals, a forced restart is needed
+    pending_restart = true;
+    kill(shell.pid, SIGKILL);
     return {};
 }
 
@@ -599,8 +583,7 @@ std::expected<void, int> on_client_msg_jump(const git_oid& oid) {
 
     broadcast_state();
 
-    return {};
-    // return apply_serialized_metadata(); // TODO: fix this, this is causing halting after jump
+    return apply_serialized_metadata();
 }
 
 std::expected<void, int> on_client_msg_label_branch(const std::string &branch)

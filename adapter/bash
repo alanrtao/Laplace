@@ -44,55 +44,6 @@ function __laplace_precommand() {
   echo "$BASH_COMMAND" | /bin/laplace
 }
 
-function __laplace_flush() {
-  return 0 # TODO: remove
-
-  srcf=$(mktemp)
-
-  # clear then flush
-
-  while IFS= read -r k < <(compgen -e); do
-    echo unset $k >> $srcf
-  done
-  while IFS= read -r a < <(compgen -a); do
-    echo unalias $a >> $srcf
-  done
-  while IFS= read -r f < <(compgen -A function); do
-    echo unset $f >> $srcf
-  done
-  for SIG in $(seq 0 64) ERR RETURN; do
-    echo trap - ${SIG} >>$srcf # this also unregisters this current flush trap
-  done
-
-  while IFS= read -r -d '' kv < __laplace_env; do
-    echo export $kv >> $srcf
-  done
-  while IFS= read -r -d '' a < __laplace_alias; do
-    echo $a >> $srcf
-  done
-  while IFS= read -r -d '' f < __laplace_func; do
-    echo $f >> $srcf
-  done
-  while IFS= read -r -d '' t < __laplace_env; do
-    echo $t >> $srcf
-  done
-
-
-  # shopt automatically sets everything, no need to clear/flush
-  source /tmp/__laplace_shopt
-
-  source $srcf
-  rm $srcf
-
-  rm "/tmp/__laplace_env"
-  rm "/tmp/__laplace_alias"
-  rm "/tmp/__laplace_func"
-  rm "/tmp/__laplace_shopt"
-  rm "/tmp/__laplace_trap"
-
-  trap __laplace_flush SIGUSR1 # must reregister flush trap
-}
-
 function __laplace_postcommand() {
   AT_PROMPT=1
 
@@ -104,8 +55,8 @@ function __laplace_postcommand() {
   exec 2222< <(printf "_="; shopt -p) # don't break shopt output, there's no point
   exec 2223< <(while IFS="" read F; do printf $(echo $F | cut -c 12-)=; $F; printf "\0"; done < <(declare -F))
   
-  trap __laplace_flush SIGUSR1
   trap "__laplace_precommand" DEBUG
 }
+
 PROMPT_COMMAND="__laplace_postcommand"
 

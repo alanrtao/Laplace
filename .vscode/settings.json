@@ -98,7 +98,12 @@
         "__split_buffer": "cpp",
         "__tree": "cpp",
         "filesystem": "cpp",
-        "print": "cpp"
+        "print": "cpp",
+        "__locale": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     },
     "cmake.automaticReconfigure": false
 }
