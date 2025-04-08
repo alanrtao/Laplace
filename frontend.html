@@ -86,93 +86,86 @@
     <!-- <script src="https://unpkg.com/tippy.js@6"></script> -->
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script>
+        var gitgraph = null;
         document.addEventListener('DOMContentLoaded', function() {
             function render(state) {
                 console.log(state)
+
                 var graphContainer = document.querySelector('#diagram');
 
                 const branches = new Map();
-                const gitgraph = GitgraphJS.createGitgraph(graphContainer, {
-                    template: GitgraphJS.templateExtend("metro", { 
-                        branch: {
-                            label: {
-                                font: 'atkinson-hyperlegible-regular'
-                            }
-                        },
-                        commit: {
-                            message: {
-                                color: 'black',
-                                displayAuthor: false,
-                                displayHash: false,
-                                font: 'atkinson-hyperlegible-regular'
-                            }
-                        }
-                    }),
-                });
+                
+                if (gitgraph === null) {
+                    gitgraph = GitgraphJS.createGitgraph(graphContainer, {
+                        template: GitgraphJS.templateExtend("metro", { 
+                            branch: {
+                                label: {
+                                    font: 'atkinson-hyperlegible-regular'
+                                }
+                            },
+                            commit: {
+                                message: {
+                                    color: 'black',
+                                    displayAuthor: false,
+                                    displayHash: false,
+                                    font: 'atkinson-hyperlegible-regular'
+                                }
+                            },
+                            orientation: GitgraphJS.Orientation.VerticalReverse,
+                        }),
+                    });
+                } else {
+                    gitgraph.clear();
+                }
+
                 const series = state.graph_timeseries;
+                const tooltips = new Map();
 
                 state.graph_timeseries.forEach((ent, t) => {
                     if (ent.entity === "branch") {
                         branches[ent.name] = gitgraph.branch(ent.name);
                     }
                     else if (ent.entity === "commit") {
-                        const onClick = () => {
-                            console.log("clicked", ent);
+                        const onClick = (a, b, c) => {
+                            console.log(a, b, c);
+                            if (tooltips.has(ent.id_full)) {
+                                tooltips[ent.id_full].show(); // TODO
+                            } else {
+                                var annotation = document.createElement('div');
+                                var jump_to = document.createElement('button');
+                                jump_to.onclick = (ev) => {
+                                    console.log("jump to" + ent.id_full);
+                                    webSocketMsgOnce({ endpoint: "jump", params: ent.id_full })
+                                }
+                                jump_to.innerText = "jump to commit";
+                                annotation.appendChild(jump_to);
+                                document.body.appendChild(annotation);
+                                // Popper.createPopper(element, annotation);
+                                tooltips[ent.id_full] = annotation;
+                            }
                         };
+
+                        var dotStyle = {};
+                        if (ent.id_full === state.current) {
+                            dotStyle.color = 'red';
+                        }
 
                         branches[ent.branch].commit({
                             subject: ent.commit_message,
                             message: ent.comments,
                             // detail: ent.diffs,
                             onMessageClick: onClick,
-                            onClick: onClick
+                            onClick: onClick,
+                            style: { dot: dotStyle }
                         });
                     }
                 });
-
-                console.log(branches);
-                
-                // document.querySelectorAll("#diagram .commit").forEach(element => {
-                //     element.classList.forEach(cls => {
-                //         if (!cls.startsWith('commit')) { // all stylistic attrs start with class, the commit ID is just alone 
                             
-                //             var annotation = document.createElement('div');
-                //             annotation.innerText = state.messages[cls];
-                            
-                //             var jump_to = document.createElement('button');
-                //             jump_to.onclick = (ev) => {
-                //                 console.log("jump to" + state.oids[cls]);
-                //                 webSocketMsgOnce({ endpoint: "jump", params: state.oids[cls] })
-                //             }
-                //             jump_to.innerText = "jump to commit";
-                //             annotation.appendChild(jump_to);
-                            
-                //             // const reference = document.querySelector('#my-node');
-                //             // const bubble = document.createElement('div');
-                //             // bubble.textContent = 'This is my bubble';
-                //             // bubble.classList.add('my-bubble');
-                //             // document.body.appendChild(bubble);
-                            
-                //             document.querySelector('')
-                            
-                //             document.body.appendChild(annotation);
-                //             Popper.createPopper(element, annotation);
-                            
-                            
-                //             // // https://atomiks.github.io/tippyjs/
-                //             // // list of params
-                //             // // https://atomiks.github.io/tippyjs/v6/all-props
-                //             // tippy(element, { 
-                //             //     content: annotation, 
-                //             //     appendTo: () => document.body,
-                //             //     animation: 'shift-away',
-                //             //     placement: 'right',
-                //             //     interactive: true,
-                //             //     allowHTML: true,
-                //             //     });
-                //         }
-                //     })
-                // })
+                // const reference = document.querySelector('#my-node');
+                // const bubble = document.createElement('div');
+                // bubble.textContent = 'This is my bubble';
+                // bubble.classList.add('my-bubble');
+                // document.body.appendChild(bubble);
             }
             
             function connectToServer(url) {
