@@ -141,7 +141,55 @@ void reopen_tty(const std::string& tty_path) {
 
 }
 
+std::expected<void, std::string> serialize_existing_metadata() {
+    // - __laplace
+    // |---- k1
+    // |-------- v1
+    // |-------- v2
+    // |-------- v3
+    // |---- k2
+    // ...
+
+    // each of k will be written to one tempfile called /tmp/__laplace_{k}
+    // containing v1, v2, ... separated by \0
+
+    // write each metadata type into a single temp file
+    for (auto& k_ent : std::filesystem::directory_iterator("/__laplace")) {
+        if (!k_ent.is_directory()) { continue; }
+
+        auto k = k_ent.path().filename().string();
+
+        // skip hidden folders such as .git
+        if (k[0] == '.') {
+            continue;
+        }
+
+        std::string f_dst = "/tmp/__laplace_" + k;
+        int fd_dst = open(f_dst.c_str(), O_WRONLY | O_APPEND);
+
+        for (auto& v_ent : std::filesystem::directory_iterator(k_ent.path()) ) {
+            auto v = v_ent.path();
+            int fd_src = open(v.c_str(), O_RDONLY);
+            struct stat stat_buf;
+            fstat(fd_src,&stat_buf);
+
+            sendfile(fd_dst, fd_src, NULL, stat_buf.st_size);
+
+            close(fd_src);
+            write(fd_dst, "\0", 1);
+
+            std::cerr << k_ent << "::" << v_ent << std::endl;
+        }
+
+        close(fd_dst);
+    }
+
+    return {};
+}
+
 std::expected<void, std::string> restart_shell(const opts_main_t& opts, const opts_additional_t& opts_) {
+
+    serialize_existing_metadata();
 
     // generate a disregard message, to be consumed on the websocket side
     // this allows the first prompt command (i.e. without any command attached to it) to be ignored,

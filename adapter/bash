@@ -1,3 +1,4 @@
+# Shell --> monitor communication
 function __laplace() {
     exec 2220< <(env -0)
     exec 2221< <(while IFS="" read A; do printf $A=; alias $A; printf "\0"; done < <(compgen -a))
@@ -25,7 +26,7 @@ function __laplace() {
 
     exec 2220<&-
     exec 2221<&-
-    # exec 2222<&-
+    exec 2222<&-
     exec 2223<&-
     exec 2224<&-
 }
@@ -49,15 +50,69 @@ function __laplace_postcommand() {
 
   # for checkpoints, actually submit the entire state for diffing purposes
   __laplace "__laplace"
-
-  exec 2220< <(env -0)
-  exec 2221< <(while IFS="" read A; do printf $A=; alias $A; printf "\0"; done < <(compgen -a))
-  exec 2222< <(printf "_="; shopt -p) # don't break shopt output, there's no point
-  exec 2223< <(while IFS="" read F; do printf $(echo $F | cut -c 12-)=; $F; printf "\0"; done < <(declare -F))
-  
   trap "__laplace_precommand" DEBUG
 }
 
 PROMPT_COMMAND="__laplace_postcommand"
 
 echo "Welcome to Laplace! :>"
+
+srcf=$(mktemp)
+
+# for env, alias, func, trap, clear then apply each entry separately
+
+# env
+if [ -f '/tmp/__laplace_env' ]; then
+  while IFS= read -r k < <(compgen -e); do
+    echo unset $k >> $srcf
+  done
+  while IFS= read -r -d '' kv < /tmp/__laplace_env; do
+    echo export $kv >> $srcf
+  done
+fi
+
+# alias
+if [ -f '/tmp/__laplace_alias' ]; then
+  while IFS= read -r a < <(compgen -a); do
+    echo unalias $a >> $srcf
+  done
+  while IFS= read -r -d '' a < /tmp/__laplace_alias; do
+    echo $a >> $srcf
+  done
+fi
+
+# func
+if [ -f '/tmp/__laplace_func' ]; then
+  while IFS= read -r f < <(compgen -A function); do
+    echo unset $f >> $srcf
+  done
+  while IFS= read -r -d '' f < /tmp/__laplace_func; do
+    echo $f >> $srcf
+  done
+fi
+
+# trap
+if [ -f '/tmp/__laplace_trap' ]; then
+  for SIG in $(seq 0 64) ERR RETURN; do
+    echo trap - ${SIG} >>$srcf # this also unregisters this current flush trap
+  done
+  while IFS= read -r -d '' t < /tmp/__laplace_trap; do
+    echo $t >> $srcf
+  done
+fi
+
+cat $srcf
+
+# shopt automatically sets everything, no need to clear/flush
+if [ -f '/tmp/__laplace_shopt' ]; then
+  echo 'source /tmp/__laplace_shopt' >> $srcf
+fi
+
+source $srcf
+rm $srcf
+
+rm -f "/tmp/__laplace_env"
+rm -f "/tmp/__laplace_alias"
+rm -f "/tmp/__laplace_func"
+rm -f "/tmp/__laplace_shopt"
+rm -f "/tmp/__laplace_trap"
