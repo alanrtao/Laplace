@@ -63,7 +63,7 @@ srcf=$(mktemp)
 
 # env
 if [ -f '/tmp/__laplace_env' ]; then
-  cat '/tmp/__laplace_env'
+  # cat '/tmp/__laplace_env'
   while IFS="" read -r k; do
     echo unset $k >> $srcf
   done < <(compgen -e)
@@ -75,7 +75,7 @@ if [ -f '/tmp/__laplace_env' ]; then
 fi
 
 if [ -f '/tmp/__laplace_alias' ]; then
-  cat '/tmp/__laplace_alias'
+  # cat '/tmp/__laplace_alias'
   # alias
   while IFS="" read -r a; do
     echo unalias $a >>  $srcf
@@ -87,7 +87,7 @@ if [ -f '/tmp/__laplace_alias' ]; then
 fi
 
 if [ -f '/tmp/__laplace_func' ]; then
-  cat '/tmp/__laplace_func'
+  # cat '/tmp/__laplace_func'
   # func
   while IFS="" read -r f; do
     echo unset $f >>  $srcf
@@ -99,7 +99,7 @@ if [ -f '/tmp/__laplace_func' ]; then
 fi
 
 if [ -f '/tmp/__laplace_trap' ]; then
-  cat '/tmp/__laplace_trap'
+  # cat '/tmp/__laplace_trap'
   # trap
   for SIG in $(seq 0 64) ERR RETURN; do
     echo trap - ${SIG} >> $srcf # this also unregisters this current flush trap
@@ -111,7 +111,7 @@ if [ -f '/tmp/__laplace_trap' ]; then
 fi
 
 if [ -f '/tmp/__laplace_shopt' ]; then
-  cat '/tmp/__laplace_shopt'
+  # cat '/tmp/__laplace_shopt'
   # shopt automatically sets everything, no need to clear
   while IFS="" read -r s; do
     echo $s >> $srcf

@@ -1,143 +1,218 @@
 <html ng-app="app">
 <head>
-
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.css" rel="stylesheet" />
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script> -->
-  <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
- 
-  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
-  <link href="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.css" rel="stylesheet" type="text/css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.2/d3.min.js" charset="utf-8"></script>
-  <script src="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.js"></script>
-
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-
-  <style type="text/css">
-    .atkinson-hyperlegible-regular {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 400;
-    font-style: normal;
-    }
-
-    .atkinson-hyperlegible-bold {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 700;
-    font-style: normal;
-    }
-
-    .atkinson-hyperlegible-regular-italic {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 400;
-    font-style: italic;
-    }
-
-    .atkinson-hyperlegible-bold-italic {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 700;
-    font-style: italic;
-    }
-  </style>
+    
+    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.css" rel="stylesheet" /> -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/@gitgraph/js"></script>
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
+    
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
+    <link href="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.css" rel="stylesheet" type="text/css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.2/d3.min.js" charset="utf-8"></script>
+    <script src="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.js"></script>
+    
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    
+    <style type="text/css">
+        .atkinson-hyperlegible-regular {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 400;
+            font-style: normal;
+        }
+        
+        .atkinson-hyperlegible-bold {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 700;
+            font-style: normal;
+        }
+        
+        .atkinson-hyperlegible-regular-italic {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 400;
+            font-style: italic;
+        }
+        
+        .atkinson-hyperlegible-bold-italic {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 700;
+            font-style: italic;
+        }
+        
+        /* https://popper.js.org/docs/v2/tutorial/ */
+        
+        #tooltip[data-popper-placement^='top'] > #arrow {
+            bottom: -4px;
+        }
+        
+        #tooltip[data-popper-placement^='bottom'] > #arrow {
+            top: -4px;
+        }
+        
+        #tooltip[data-popper-placement^='left'] > #arrow {
+            right: -4px;
+        }
+        
+        #tooltip[data-popper-placement^='right'] > #arrow {
+            left: -4px;
+        }
+        
+        #arrow,
+        #arrow::before {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: inherit;
+        }
+        
+        #arrow {
+            visibility: hidden;
+        }
+        
+        #arrow::before {
+            visibility: visible;
+            content: '';
+            transform: rotate(45deg);
+        }
+    </style>
 </head>
 <body class="atkinson-hyperlegible-regular">
-
-    <div class="mermaid" id="diagram"></div>
-
+    
+    <div id="diagram"></div>
+    
     <script src="https://unpkg.com/@popperjs/core@2"></script>
-    <script src="https://unpkg.com/tippy.js@6"></script>
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-
-        mermaid.initialize({ startOnLoad: true });
+    <!-- <script src="https://unpkg.com/tippy.js@6"></script> -->
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script>
         document.addEventListener('DOMContentLoaded', function() {
-            mermaid.initialize({ startOnLoad: true, securityLevel: 'loose',});
-
             function render(state) {
                 console.log(state)
-                // https://mermaid.js.org/syntax/gitgr
-                const drawDiagram = async function () {
-                    var element = document.querySelector('#diagram');
-                    const graphDefinition = "gitGraph TB:\n" + state.graph;
-                    // console.log(graphDefinition);
-                    const { svg, bindFunctions } = await mermaid.render('graphDiv', graphDefinition);
-                    element.innerHTML = svg;
-                    if (bindFunctions) {
-                        bindFunctions(element);
-                    }
-                    document.querySelectorAll("#diagram .commit").forEach(element => {
-                        element.classList.forEach(cls => {
-                            if (!cls.startsWith('commit')) { // all stylistic attrs start with class, the commit ID is just alone 
-                                
-                                var annotation = document.createElement('div');
-                                annotation.innerText = state.messages[cls];
+                var graphContainer = document.querySelector('#diagram');
 
-                                var jump_to = document.createElement('button');
-                                jump_to.onclick = (ev) => {
-                                    console.log("jump to" + state.oids[cls]);
-                                    webSocketMsgOnce({ endpoint: "jump", params: state.oids[cls] })
-                                }
-                                jump_to.innerText = "jump to commit";
-                                annotation.appendChild(jump_to);
-
-                                // https://atomiks.github.io/tippyjs/
-                                // list of params
-                                // https://atomiks.github.io/tippyjs/v6/all-props
-                                tippy(element, { 
-                                    content: annotation, 
-                                    appendTo: () => document.body,
-                                    animation: 'shift-away',
-                                    placement: 'right',
-                                    interactive: true,
-                                    allowHTML: true,
-                                    });
+                const branches = new Map();
+                const gitgraph = GitgraphJS.createGitgraph(graphContainer, {
+                    template: GitgraphJS.templateExtend("metro", { 
+                        branch: {
+                            label: {
+                                font: 'atkinson-hyperlegible-regular'
                             }
-                        })
-                    })
-                };
+                        },
+                        commit: {
+                            message: {
+                                color: 'black',
+                                displayAuthor: false,
+                                displayHash: false,
+                                font: 'atkinson-hyperlegible-regular'
+                            }
+                        }
+                    }),
+                });
+                const series = state.graph_timeseries;
 
-                drawDiagram();
+                state.graph_timeseries.forEach((ent, t) => {
+                    if (ent.entity === "branch") {
+                        branches[ent.name] = gitgraph.branch(ent.name);
+                    }
+                    else if (ent.entity === "commit") {
+                        const onClick = () => {
+                            console.log("clicked", ent);
+                        };
+
+                        branches[ent.branch].commit({
+                            subject: ent.commit_message,
+                            message: ent.comments,
+                            // detail: ent.diffs,
+                            onMessageClick: onClick,
+                            onClick: onClick
+                        });
+                    }
+                });
+
+                console.log(branches);
+                
+                // document.querySelectorAll("#diagram .commit").forEach(element => {
+                //     element.classList.forEach(cls => {
+                //         if (!cls.startsWith('commit')) { // all stylistic attrs start with class, the commit ID is just alone 
+                            
+                //             var annotation = document.createElement('div');
+                //             annotation.innerText = state.messages[cls];
+                            
+                //             var jump_to = document.createElement('button');
+                //             jump_to.onclick = (ev) => {
+                //                 console.log("jump to" + state.oids[cls]);
+                //                 webSocketMsgOnce({ endpoint: "jump", params: state.oids[cls] })
+                //             }
+                //             jump_to.innerText = "jump to commit";
+                //             annotation.appendChild(jump_to);
+                            
+                //             // const reference = document.querySelector('#my-node');
+                //             // const bubble = document.createElement('div');
+                //             // bubble.textContent = 'This is my bubble';
+                //             // bubble.classList.add('my-bubble');
+                //             // document.body.appendChild(bubble);
+                            
+                //             document.querySelector('')
+                            
+                //             document.body.appendChild(annotation);
+                //             Popper.createPopper(element, annotation);
+                            
+                            
+                //             // // https://atomiks.github.io/tippyjs/
+                //             // // list of params
+                //             // // https://atomiks.github.io/tippyjs/v6/all-props
+                //             // tippy(element, { 
+                //             //     content: annotation, 
+                //             //     appendTo: () => document.body,
+                //             //     animation: 'shift-away',
+                //             //     placement: 'right',
+                //             //     interactive: true,
+                //             //     allowHTML: true,
+                //             //     });
+                //         }
+                //     })
+                // })
             }
-        
+            
             function connectToServer(url) {
                 let socket = new WebSocket(url);
-        
+                
                 socket.onopen = () => {
                     webSocketMsgOnce({ endpoint:"fetch", params:"" }).then((msg) => {
                         render(JSON.parse(msg.data))
                     });
                 }
-        
+                
                 socket.onmessage = (msg) => render(JSON.parse(msg.data));
-        
+                
                 socket.onclose = () => {
                     console.log("WebSocket closed, retrying in 1 second...");
                     setTimeout(() => connectToServer(url), 1000);
                 };
-        
+                
                 socket.onerror = (error) => console.error("WebSocket error:", error);
             }
-        
+            
             function webSocketMsgOnce(req) {
                 return new Promise((resolve, reject) => {
                     let socket = new WebSocket("ws://localhost:8008");
-        
+                    
                     socket.onopen = () => {
                         socket.send(JSON.stringify(req));
                     }
-        
+                    
                     socket.onmessage = (e) => {
                         resolve(e);
                         socket.close();
                     }
-        
+                    
                     socket.onerror = (e) => {
                         reject(e);
                     }
                 });
             }
-        
+            
             connectToServer("ws://localhost:8008");
         });
     </script>
