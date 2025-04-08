@@ -165,7 +165,12 @@ std::expected<void, std::string> serialize_existing_metadata() {
         }
 
         std::string f_dst = "/tmp/__laplace_" + k;
-        int fd_dst = open(f_dst.c_str(), O_WRONLY | O_APPEND);
+        int fd_dst = open(f_dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC);
+
+        if (fd_dst < 0) {
+            perror("open");
+            return std::unexpected("Create temp file " + f_dst);
+        }
 
         for (auto& v_ent : std::filesystem::directory_iterator(k_ent.path()) ) {
             auto v = v_ent.path();
