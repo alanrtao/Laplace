@@ -31,7 +31,6 @@ std::vector<std::string> subcommands{};
 
 shell_t shell{};
 std::atomic<bool> pending_restart = false;
-std::atomic<bool> disregard_shell_msg = false;
 
 std::string oid_str(const git_oid &oid)
 {
@@ -65,11 +64,11 @@ std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit 
 
 struct laplace_state_resp
 {
-
     using cmd_t = std::string;
     using dict_t = std::unordered_map<std::string, std::string>;
 
     std::vector<dict_t> graph_timeseries;
+    std::unordered_map<std::string, dict_t> diffs;
     std::string current;
     std::string error;
 };
@@ -237,7 +236,6 @@ std::expected<void, std::string> restart_shell(const opts_main_t &opts, const op
     // generate a disregard message, to be consumed on the websocket side
     // this allows the first prompt command (i.e. without any command attached to it) to be ignored,
     // fixing the creation of unintended branches & commits
-    disregard_shell_msg = true;
 
     const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
     if (!std::filesystem::exists(adapter))
@@ -534,7 +532,7 @@ std::expected<void, int> init_laplace()
     return {};
 }
 
-std::expected<std::string, int> diff_commit_parent(git_commit *commit)
+std::expected<std::unordered_map<std::string, std::string>, int> diff_commit_parent(git_commit *commit)
 {
     git_commit *parent = NULL;
 
@@ -564,16 +562,16 @@ std::expected<std::string, int> diff_commit_parent(git_commit *commit)
         static std::mutex _;
         std::lock_guard _lock(_);
 
-        static std::string buf;
-        buf = "";
+        static std::unordered_map<std::string, std::string> buf;
+        buf = {};
 
         auto line_cb = [](                              // cannot use capture here, C++ lambda with capture is not convertible to a function pointer (due to it being a functor object)
-                           const git_diff_delta *delta, /**< delta that contains this data */
-                           const git_diff_hunk *hunk,   /**< hunk containing this data */
-                           const git_diff_line *line,   /**< line data */
-                           void *payload) -> int
+            const git_diff_delta *delta, /**< delta that contains this data */
+            const git_diff_hunk *hunk,   /**< hunk containing this data */
+            const git_diff_line *line,   /**< line data */
+            void *payload) -> int
         {
-            buf += std::string(line->content, line->content_len);
+            buf[std::string(delta->new_file.path)] += std::string(line->content, line->content_len);
             return 0;
         };
 
@@ -581,16 +579,18 @@ std::expected<std::string, int> diff_commit_parent(git_commit *commit)
 
         return buf;
     }
-    // for the very first commit, there is no parent
+    // for the very first commit, there is no parent. by Laplace's own convention the initial commit always has no change anyway,
+    // so we just disregard
     else
     {
-        // TODO:
-        return "NEED IMPL";
+        return {};
     }
 }
 
 std::expected<bool, int> metadata_has_changed()
 {
+    // FIXME
+    return true;
 
     auto head = get_head_commit();
     abortif(head);
@@ -621,14 +621,6 @@ std::expected<bool, int> metadata_has_changed()
 
 std::expected<void, int> on_shell_msg(const std::string_view msg)
 {
-
-    // Consume the disregard flag generated after restarting the shell
-    if (disregard_shell_msg)
-    {
-        disregard_shell_msg = false;
-        return {};
-    }
-
     glz::error_ctx json_err;
     int err;
 
@@ -748,6 +740,7 @@ std::expected<void, int> serialize_metadata(const metadata_t &msg)
                 perror(err.c_str());
             }
 
+            write(fd_v, "\n", 1);
             close(fd_v);
         }
     }
@@ -980,7 +973,6 @@ std::expected<laplace_state_resp, int> render_mermaid()
         }
 
         std::string message = "";
-        std::string diffs = "";
 
         std::string id_full = oid_str(oid);
         std::string id = id_full.substr(0, 6);
@@ -991,7 +983,7 @@ std::expected<laplace_state_resp, int> render_mermaid()
             auto diffs_req = diff_commit_parent(commit);
             if (diffs_req)
             {
-                diffs = *diffs_req;
+                res.diffs[id_full] = *diffs_req;
             }
             else
             {
@@ -1005,7 +997,6 @@ std::expected<laplace_state_resp, int> render_mermaid()
             {"branch", note.branch},
             {"id", id},
             {"id_full", id_full},
-            {"diffs", diffs},
             {"commit_message", message},
             {"comments", note.comments},
         });

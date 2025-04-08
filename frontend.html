@@ -1,64 +1,67 @@
 <html ng-app="app">
+
 <head>
-    
+
     <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.css" rel="stylesheet" /> -->
     <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script> -->
     <script src="https://cdn.jsdelivr.net/npm/@gitgraph/js"></script>
     <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
-    
+
     <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
     <link href="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.css" rel="stylesheet" type="text/css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.2/d3.min.js" charset="utf-8"></script>
     <script src="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.js"></script>
-    
+
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
-    
+    <link
+        href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+        rel="stylesheet">
+
     <style type="text/css">
         .atkinson-hyperlegible-regular {
             font-family: "Atkinson Hyperlegible", sans-serif;
             font-weight: 400;
             font-style: normal;
         }
-        
+
         .atkinson-hyperlegible-bold {
             font-family: "Atkinson Hyperlegible", sans-serif;
             font-weight: 700;
             font-style: normal;
         }
-        
+
         .atkinson-hyperlegible-regular-italic {
             font-family: "Atkinson Hyperlegible", sans-serif;
             font-weight: 400;
             font-style: italic;
         }
-        
+
         .atkinson-hyperlegible-bold-italic {
             font-family: "Atkinson Hyperlegible", sans-serif;
             font-weight: 700;
             font-style: italic;
         }
-        
+
         /* https://popper.js.org/docs/v2/tutorial/ */
-        
-        #tooltip[data-popper-placement^='top'] > #arrow {
+
+        #tooltip[data-popper-placement^='top']>#arrow {
             bottom: -4px;
         }
-        
-        #tooltip[data-popper-placement^='bottom'] > #arrow {
+
+        #tooltip[data-popper-placement^='bottom']>#arrow {
             top: -4px;
         }
-        
-        #tooltip[data-popper-placement^='left'] > #arrow {
+
+        #tooltip[data-popper-placement^='left']>#arrow {
             right: -4px;
         }
-        
-        #tooltip[data-popper-placement^='right'] > #arrow {
+
+        #tooltip[data-popper-placement^='right']>#arrow {
             left: -4px;
         }
-        
+
         #arrow,
         #arrow::before {
             position: absolute;
@@ -66,38 +69,48 @@
             height: 8px;
             background: inherit;
         }
-        
+
         #arrow {
             visibility: hidden;
         }
-        
+
         #arrow::before {
             visibility: visible;
             content: '';
             transform: rotate(45deg);
         }
+
+        #diagram svg {
+            overflow: visible;
+        }
+
+        #diagram svg p {
+            color: '#ff0000';
+        }
     </style>
 </head>
+
 <body class="atkinson-hyperlegible-regular">
-    
+
     <div id="diagram"></div>
-    
+
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <!-- <script src="https://unpkg.com/tippy.js@6"></script> -->
     <script src="https://unpkg.com/@popperjs/core@2"></script>
     <script>
         var gitgraph = null;
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', function () {
             function render(state) {
                 console.log(state)
 
                 var graphContainer = document.querySelector('#diagram');
 
                 const branches = new Map();
-                
+
                 if (gitgraph === null) {
                     gitgraph = GitgraphJS.createGitgraph(graphContainer, {
-                        template: GitgraphJS.templateExtend("metro", { 
+                        orientation: GitgraphJS.Orientation.VerticalReverse,
+                        template: GitgraphJS.templateExtend(null, {
                             branch: {
                                 label: {
                                     font: 'atkinson-hyperlegible-regular'
@@ -111,12 +124,13 @@
                                     font: 'atkinson-hyperlegible-regular'
                                 }
                             },
-                            orientation: GitgraphJS.Orientation.VerticalReverse,
                         }),
                     });
                 } else {
                     gitgraph.clear();
                 }
+
+                console.log(gitgraph);
 
                 const series = state.graph_timeseries;
                 const tooltips = new Map();
@@ -152,62 +166,62 @@
 
                         branches[ent.branch].commit({
                             subject: ent.commit_message,
-                            message: ent.comments,
-                            // detail: ent.diffs,
+                            hash: ent.id_full,
                             onMessageClick: onClick,
                             onClick: onClick,
                             style: { dot: dotStyle }
                         });
                     }
                 });
-                            
+
                 // const reference = document.querySelector('#my-node');
                 // const bubble = document.createElement('div');
                 // bubble.textContent = 'This is my bubble';
                 // bubble.classList.add('my-bubble');
                 // document.body.appendChild(bubble);
             }
-            
+
             function connectToServer(url) {
                 let socket = new WebSocket(url);
-                
+
                 socket.onopen = () => {
-                    webSocketMsgOnce({ endpoint:"fetch", params:"" }).then((msg) => {
+                    webSocketMsgOnce({ endpoint: "fetch", params: "" }).then((msg) => {
                         render(JSON.parse(msg.data))
                     });
                 }
-                
+
                 socket.onmessage = (msg) => render(JSON.parse(msg.data));
-                
+
                 socket.onclose = () => {
                     console.log("WebSocket closed, retrying in 1 second...");
                     setTimeout(() => connectToServer(url), 1000);
                 };
-                
+
                 socket.onerror = (error) => console.error("WebSocket error:", error);
             }
-            
+
             function webSocketMsgOnce(req) {
                 return new Promise((resolve, reject) => {
                     let socket = new WebSocket("ws://localhost:8008");
-                    
+
                     socket.onopen = () => {
                         socket.send(JSON.stringify(req));
                     }
-                    
+
                     socket.onmessage = (e) => {
                         resolve(e);
                         socket.close();
                     }
-                    
+
                     socket.onerror = (e) => {
                         reject(e);
                     }
                 });
             }
-            
+
             connectToServer("ws://localhost:8008");
         });
     </script>
 </body>
+
 </html>
