@@ -1,6 +1,7 @@
 #include <iostream>
 #include <filesystem>
 #include <thread>
+#include <atomic>
 #include <stacktrace>
 #include <set>
 
@@ -28,8 +29,8 @@ git_repository* repo = NULL;
 std::vector<std::string> subcommands {};
 
 shell_t shell {};
-bool pending_restart = false;
-opts_main_t shell_launch_opts;
+std::atomic<bool> pending_restart = false;
+std::atomic<bool> disregard_shell_msg = false;
 
 std::string oid_str(const git_oid& oid) {
     return std::string(git_oid_tostr_s(&oid));
@@ -99,23 +100,82 @@ void print_lg2_err(int error, const std::string& msg)
 }
 #define lg2(e, msg) { if (auto __v = (e); __v) { print_lg2_err(__v, (msg)); return std::unexpected(__v); } }
 
-std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexcept {
-    shell_launch_opts = opts;
+struct opts_additional_t {
+    std::string tty_path;
+};
 
-    // recursive definition for restarting the shell, i.e. just do this exact same function call again
+std::expected<std::string, std::string> get_current_tty() {
+    // Check if stdin is a terminal
+    if (isatty(STDIN_FILENO)) {
+        const char* tty_path = ttyname(STDIN_FILENO);
+        if (tty_path) {
+            return std::string(tty_path);
+        }
+    }
+    // Fallback to stdout/stderr if stdin is not a terminal
+    if (isatty(STDOUT_FILENO)) {
+        const char* tty_path = ttyname(STDOUT_FILENO);
+        if (tty_path) {
+            return std::string(tty_path);
+        }
+    }
+    if (isatty(STDERR_FILENO)) {
+        const char* tty_path = ttyname(STDERR_FILENO);
+        if (tty_path) {
+            return std::string(tty_path);
+        }
+    }
+    // If no terminal found, return an empty string or throw an error
+    return std::unexpected<std::string>("NO TTY DETECTED");
+}
+
+void reopen_tty(const std::string& tty_path) {
+    // Reopen stdin/stdout/stderr to the current TTY
+    int tty_fd = open(tty_path.c_str(), O_RDWR);
+    if (tty_fd >= 0) {
+        dup2(tty_fd, STDIN_FILENO);
+        dup2(tty_fd, STDOUT_FILENO);
+        dup2(tty_fd, STDERR_FILENO);
+        close(tty_fd);
+    }
+
+}
+
+std::expected<void, std::string> restart_shell(const opts_main_t& opts, const opts_additional_t& opts_) {
+
+    // generate a disregard message, to be consumed on the websocket side
+    // this allows the first prompt command (i.e. without any command attached to it) to be ignored,
+    // fixing the creation of unintended branches & commits
+    disregard_shell_msg = true;
+
     const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
     if (!std::filesystem::exists(adapter)) {
         throw("Adapter not found: " + adapter);
     }
 
-    if (shell.pid = fork(); shell.pid < 0) {
+    int pid;
+    if (pid = fork(); pid < 0) {
         throw("Fork failure: " + ERRNO);
     }
 
-    unlink(laplace_socket_path.c_str());
-
     // on child process, switch to shell
-    if (shell.pid == 0) {
+    if (pid == 0) {
+        // int tty_fd = open(opts_.tty_path.c_str(), O_RDWR);
+        // if (tty_fd < 0) {
+        //     perror("reopen tty");
+        //     exit(1);
+        // }
+
+        // dup2(tty_fd, STDIN_FILENO);
+        // dup2(tty_fd, STDOUT_FILENO);
+        // dup2(tty_fd, STDERR_FILENO);
+
+        // FIXME: set as session leader, this grants the child process control over the terminal across restarts
+        // setsid();
+
+        // force TTY to open
+        // reopen_tty(opts_.tty_path);
+
         // TODO: look into zsh params
         auto cmd = const_cast<char*>(opts.frontend_path.c_str());
         char * const argv[] = {
@@ -123,18 +183,18 @@ std::expected<shell_t, std::string> launch_shell(const opts_main_t& opts) noexce
             const_cast<char*>("--rcfile"), const_cast<char*>(adapter.c_str()),
             NULL
         };
-
-        std::cerr << "Shell launched!" << std::endl;
-
         execve(opts.frontend_path.c_str(), argv, NULL);
-
-        throw("Execute shell failure: " + ERRNO);
+        perror("execve");
+        exit(1);
+    }
+    else {
+        shell.pid = pid;
     }
 
-    return shell;
+    return {};
 }
 
-std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
+std::expected<void, std::string> manage_shell(const opts_main_t& opts) noexcept {
 
     /* Create socket from which to read. */
     int sock_fd = socket(AF_UNIX, SOCK_DGRAM, 0);
@@ -148,6 +208,7 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
     else { defer([]{ git_libgit2_shutdown(); }); }
 
     /* Create name. */
+    unlink(laplace_socket_path.c_str());
     sockaddr_un name {};
     name.sun_family = AF_UNIX;
     strncpy(name.sun_path, laplace_socket_path.c_str(), laplace_socket_path.size() + 1);
@@ -163,7 +224,7 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
     // Git setup
     git_libgit2_init();
     git_libgit2_opts(GIT_OPT_SET_OWNER_VALIDATION, 0);
-    defer([&shell]{
+    defer([]{
         kill(shell.pid, SIGKILL);
         git_repository_free(repo);
         git_libgit2_shutdown();
@@ -176,18 +237,33 @@ std::expected<void, std::string> manage_shell(const shell_t& shell) noexcept {
     auto t_wss = std::thread(web_socket_server);
 
     /* Shell monitoring and restart thread (i.e. main thread) */
+
+    // get TTY path once to use across multiple restarts
+    auto tty = get_current_tty();
+    abortif(tty);
+    std::cout << *tty << std::endl;
+
+    // restart loop
     while (true) {
-        auto t_wait = std::thread([&shell]{
+        if (auto res = restart_shell(opts, {
+            .tty_path = *tty
+        }); !res) {
+            std::cerr << res.error() << std::endl;
+            std::cerr << "Restart shell failed, exiting..." << std::endl;
+            break;
+        }
+
+        // wait in separate thread, hopefully lower priority
+        auto t_wait = std::thread([]{
+            // Use while to handle unintended wakups
             while(waitpid(shell.pid, NULL, 0) != shell.pid);
-            std::cerr << "Shell terminated\n";
+            std::cerr << "Shell terminated" << std::endl;
         });
-    
         t_wait.join();
 
         if (pending_restart) {
             pending_restart = false;
-            std::cerr << "Restarting shell to reflect environment changes...\n";
-            launch_shell(shell_launch_opts);
+            std::cerr << "Restarting shell to reflect environment changes..." << std::endl;
         } else {
             break;
         }
@@ -330,6 +406,13 @@ std::expected<void, int> init_laplace() {
 }
 
 std::expected<void, int> on_shell_msg(const std::string_view msg) {
+
+    // Consume the disregard flag generated after restarting the shell
+    if (disregard_shell_msg) {
+        disregard_shell_msg = false;
+        return {};
+    }
+
     glz::error_ctx json_err;
     int err;
 
@@ -448,7 +531,7 @@ std::expected<void, int> apply_serialized_metadata()
 {
     // Due to lazy handling of Bash signals, a forced restart is needed
     pending_restart = true;
-    kill(shell.pid, SIGKILL);
+    kill(shell.pid, SIGHUP);
     return {};
 }
 

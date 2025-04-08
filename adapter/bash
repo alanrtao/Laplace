@@ -60,3 +60,4 @@ function __laplace_postcommand() {
 
 PROMPT_COMMAND="__laplace_postcommand"
 
+echo "Welcome to Laplace! :>"

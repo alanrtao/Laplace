@@ -6,7 +6,7 @@
 
 void main_mode(const opts_main_t &opts)
 {
-    const auto result = launch_shell(opts).and_then(manage_shell);
+    const auto result = manage_shell(opts);
     if (!result) {
         std::cerr << result.error() << std::endl;
     }
