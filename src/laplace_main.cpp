@@ -141,6 +141,7 @@ void reopen_tty(const std::string& tty_path) {
 
 }
 
+char delim = '\0';
 std::expected<void, std::string> serialize_existing_metadata() {
     // - __laplace
     // |---- k1
@@ -181,7 +182,8 @@ std::expected<void, std::string> serialize_existing_metadata() {
             sendfile(fd_dst, fd_src, NULL, stat_buf.st_size);
 
             close(fd_src);
-            write(fd_dst, "\0", 1);
+            
+            write(fd_dst, &delim, 1);
 
             std::cerr << k_ent << "::" << v_ent << std::endl;
         }

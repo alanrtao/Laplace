@@ -57,7 +57,6 @@ PROMPT_COMMAND="__laplace_postcommand"
 
 echo "Welcome to Laplace! :>"
 
-debugf='/dev/null' # set to &1 to print debugf; set to /dev/null to disable debugf
 srcf=$(mktemp)
 
 # for env, alias, func, trap, clear then apply each entry separately
@@ -66,11 +65,11 @@ srcf=$(mktemp)
 if [ -f '/tmp/__laplace_env' ]; then
   cat '/tmp/__laplace_env'
   while IFS="" read -r k; do
-    echo unset $k >$debugf | tee -a $srcf
-    echo unset $k >$debugf | tee -a $srcf
+    echo unset $k >> $srcf
   done < <(compgen -e)
   while IFS="" read -r -d '' kv; do
-    echo export $kv >$debugf | tee -a  $srcf
+
+    echo export $kv >>  $srcf
   done < '/tmp/__laplace_env'
   rm '/tmp/__laplace_env'
 fi
@@ -79,10 +78,10 @@ if [ -f '/tmp/__laplace_alias' ]; then
   cat '/tmp/__laplace_alias'
   # alias
   while IFS="" read -r a; do
-    echo unalias $a >$debugf | tee -a  $srcf
+    echo unalias $a >>  $srcf
   done < <(compgen -a)
   while IFS="" read -r -d '' a; do
-    echo $a >$debugf | tee -a  $srcf
+    echo $a >>  $srcf
   done < '/tmp/__laplace_alias'
   rm '/tmp/__laplace_alias'
 fi
@@ -91,10 +90,10 @@ if [ -f '/tmp/__laplace_func' ]; then
   cat '/tmp/__laplace_func'
   # func
   while IFS="" read -r f; do
-    echo unset $f >$debugf | tee -a  $srcf
+    echo unset $f >>  $srcf
   done < <(compgen -A function)
   while IFS="" read -r -d '' f; do
-    echo $f >$debugf | tee -a  $srcf
+    echo $f >>  $srcf
   done < '/tmp/__laplace_function'
   rm '/tmp/__laplace_function'
 fi
@@ -103,10 +102,10 @@ if [ -f '/tmp/__laplace_trap' ]; then
   cat '/tmp/__laplace_trap'
   # trap
   for SIG in $(seq 0 64) ERR RETURN; do
-    echo trap - ${SIG} >$debugf | tee -a $srcf # this also unregisters this current flush trap
+    echo trap - ${SIG} >> $srcf # this also unregisters this current flush trap
   done
   while IFS="" read -r -d '' t; do
-    echo $t >$debugf | tee -a  $srcf
+    echo $t >>  $srcf
   done < '/tmp/__laplace_trap'
   rm '/tmp/__laplace_trap'
 fi
@@ -115,11 +114,11 @@ if [ -f '/tmp/__laplace_shopt' ]; then
   cat '/tmp/__laplace_shopt'
   # shopt automatically sets everything, no need to clear
   while IFS="" read -r s; do
-    echo $s >$debugf | tee -a $srcf
+    echo $s >> $srcf
   done < '/tmp/__laplace_shopt'
   rm "/tmp/__laplace_shopt"
 fi
 
-cat $srcf
-# source $srcf
+# cat $srcf
+source $srcf
 rm $srcf
