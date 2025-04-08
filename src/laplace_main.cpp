@@ -262,7 +262,7 @@ std::expected<void, std::string> restart_shell(const opts_main_t &opts, const op
         // dup2(tty_fd, STDOUT_FILENO);
         // dup2(tty_fd, STDERR_FILENO);
 
-        // FIXME: set as session leader, this grants the child process control over the terminal across restarts
+        // set as session leader, this grants the child process control over the terminal across restarts
         // setsid();
 
         // force TTY to open
@@ -553,8 +553,14 @@ std::expected<std::unordered_map<std::string, std::string>, int> diff_commit_par
         defer([parent_tree]
               { git_tree_free(parent_tree); });
 
+        git_diff_options opts;
+        lg2(git_diff_options_init(&opts, GIT_DIFF_OPTIONS_VERSION), "git_diff_options_init");
+        opts.flags |= GIT_DIFF_IGNORE_FILEMODE;
+        opts.flags |= GIT_DIFF_IGNORE_CASE;
+        opts.flags |= GIT_DIFF_IGNORE_BLANK_LINES;
+
         git_diff *diff = NULL;
-        lg2(git_diff_tree_to_tree(&diff, repo, parent_tree, commit_tree, NULL), "git_diff_tree_to_tree");
+        lg2(git_diff_tree_to_tree(&diff, repo, parent_tree, commit_tree, &opts), "git_diff_tree_to_tree");
         defer([diff]
               { git_diff_free(diff); });
 
@@ -589,26 +595,23 @@ std::expected<std::unordered_map<std::string, std::string>, int> diff_commit_par
 
 std::expected<bool, int> metadata_has_changed()
 {
-    // FIXME
-    return true;
-
     auto head = get_head_commit();
     abortif(head);
 
     git_tree *commit_tree;
     lg2(git_commit_tree(&commit_tree, *head), "git_commit_tree");
-    defer([commit_tree]
-          { git_tree_free(commit_tree); });
+    defer([commit_tree] { git_tree_free(commit_tree); });
 
     git_diff_options opts;
     lg2(git_diff_options_init(&opts, GIT_DIFF_OPTIONS_VERSION), "git_diff_options_init");
+    opts.flags |= GIT_DIFF_INCLUDE_UNTRACKED;
+    opts.flags |= GIT_DIFF_IGNORE_FILEMODE;
 
     git_diff *diff;
     lg2(git_diff_tree_to_workdir_with_index(&diff, repo, commit_tree, &opts), "git_diff_tree_to_workdir_with_index");
-    defer([diff]
-          { git_diff_free(diff); });
+    defer([diff] { git_diff_free(diff); });
 
-    std::cout << "metadata diff count: " << git_diff_num_deltas(diff) << std::endl;
+    // std::cout << "metadata diff count: " << git_diff_num_deltas(diff) << std::endl;
     if (git_diff_num_deltas(diff) > 0)
     {
         return true;
@@ -991,7 +994,6 @@ std::expected<laplace_state_resp, int> render_mermaid()
             }
         }
 
-        // FIXME
         res.graph_timeseries.push_back({
             {"entity", "commit"},
             {"branch", note.branch},
