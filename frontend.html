@@ -1,145 +1,379 @@
 <html ng-app="app">
+
 <head>
 
-  <link href="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.css" rel="stylesheet" />
-  <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script> -->
-  <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
- 
-  <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
-  <link href="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.css" rel="stylesheet" type="text/css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.2/d3.min.js" charset="utf-8"></script>
-  <script src="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.js"></script>
+    <!-- <link href="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.css" rel="stylesheet" /> -->
+    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/mermaid/6.0.0/mermaid.js"></script> -->
+    <script src="https://cdn.jsdelivr.net/npm/@gitgraph/js"></script>
+    <script src="https://code.jquery.com/jquery-2.1.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/materialize/0.97.8/js/materialize.min.js"></script>
 
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap" rel="stylesheet">
+    <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/select2/3.5.2/select2.min.js"></script>
+    <link href="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.css" rel="stylesheet" type="text/css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.2/d3.min.js" charset="utf-8"></script>
+    <script src="https://cdn.rawgit.com/novus/nvd3/master/build/nv.d3.js"></script>
 
-  <style type="text/css">
-    .atkinson-hyperlegible-regular {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 400;
-    font-style: normal;
-    }
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400;1,700&display=swap"
+        rel="stylesheet">
 
-    .atkinson-hyperlegible-bold {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 700;
-    font-style: normal;
-    }
+    <style type="text/css">
+        .atkinson-hyperlegible-regular {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 400;
+            font-style: normal;
+        }
 
-    .atkinson-hyperlegible-regular-italic {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 400;
-    font-style: italic;
-    }
+        .atkinson-hyperlegible-bold {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 700;
+            font-style: normal;
+        }
 
-    .atkinson-hyperlegible-bold-italic {
-    font-family: "Atkinson Hyperlegible", sans-serif;
-    font-weight: 700;
-    font-style: italic;
-    }
-  </style>
+        .atkinson-hyperlegible-regular-italic {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 400;
+            font-style: italic;
+        }
+
+        .atkinson-hyperlegible-bold-italic {
+            font-family: "Atkinson Hyperlegible", sans-serif;
+            font-weight: 700;
+            font-style: italic;
+        }
+
+        /* https://popper.js.org/docs/v2/tutorial/ */
+
+        #tooltip[data-popper-placement^='top']>#arrow {
+            bottom: -4px;
+        }
+
+        #tooltip[data-popper-placement^='bottom']>#arrow {
+            top: -4px;
+        }
+
+        #tooltip[data-popper-placement^='left']>#arrow {
+            right: -4px;
+        }
+
+        #tooltip[data-popper-placement^='right']>#arrow {
+            left: -4px;
+        }
+
+        #arrow,
+        #arrow::before {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background: inherit;
+        }
+
+        #arrow {
+            visibility: hidden;
+        }
+
+        #arrow::before {
+            visibility: visible;
+            content: '';
+            transform: rotate(45deg);
+        }
+
+        body,#main {
+            padding: 0;
+            margin: 0;
+        }
+
+        #main {
+            min-height: 100vh;
+            display: flex;
+            overflow-y: scroll;
+        }
+
+        #diagram {
+            width: 60%;
+            background-color: rgb(66, 76, 110);
+        }
+
+        #diagram svg {
+            overflow: visible;
+        }
+
+        #diagram svg p {
+            color: '#ff0000';
+        }
+
+        #details {
+            color: white;
+            width: 40%;
+            background-color: rgb(47, 52, 70);
+            padding: 1em;
+        }
+
+        #conn_status {
+            padding: 0.5em;
+            border-radius: 1em;
+        }
+
+        .code_container {
+            color: aquamarine;
+            background-color: rgb(65, 67, 78);
+            padding: 1em;
+            border-radius: 0.25em;
+        }
+
+        span.code_container {
+            padding: 0.25em;
+        }
+
+        code {
+            line-height: 1em;
+        }
+    </style>
 </head>
+
 <body class="atkinson-hyperlegible-regular">
 
-    <div class="mermaid" id="diagram"></div>
+    <div id="main">
+        <div id="diagram"></div>
+        <div id="details">
+            <h2 style="display: inline-block;">Laplace Terminal</h2>
+            <p style="display: inline-block; margin-left: 1em;"><span id="conn_status"></span></p>
+            <p>Usage:</p>
+            <ol>
+                <li>Click on commits to view details.</li>
+                <li>On commit detail page, click "jump" to set terminal environment to that commit.</li>
+                <li>Edit environment variables / aliases / functions / traps to create commit.</li>
+                <li>Upon edit, when commit is not tip of branch, a new branch will be created.</li>
+                <li>Currently, there is no support for merging branches.</li>
+            </ol>
+            <div id="commit_container">
+                <p><span>ID:</span> <span class="code_container" id="commit_id"></span></p>
+                <p><span>command(s):</span></p>
+                <div class="code_container">
+                    <code id="commands"></code>
+                </div>
+                <p><span>diffs:</span></p>
+                <ul id="diffs_root"></ul>
+                <button id="jump">Jump to commit</button>
+            </div>
+        </div>
+    </div>
 
     <script src="https://unpkg.com/@popperjs/core@2"></script>
-    <script src="https://unpkg.com/tippy.js@6"></script>
-    <script type="module">
-        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    <!-- <script src="https://unpkg.com/tippy.js@6"></script> -->
+    <script src="https://unpkg.com/@popperjs/core@2"></script>
+    <script>
+        var gitgraph = null;
 
-        mermaid.initialize({ startOnLoad: true });
-        document.addEventListener('DOMContentLoaded', function() {
-            mermaid.initialize({ startOnLoad: true, securityLevel: 'loose',});
+        document.addEventListener('DOMContentLoaded', function () {
+
+            const set_conn_status = (status) => {
+                const element = document.getElementById("conn_status");
+                if (!status) {
+                    element.setAttribute('style', 'color: white; background-color: orange;');
+                    element.innerText = "Status: DISCONNECTED";
+                }
+                else {
+                    element.setAttribute('style', 'color: white; background-color: green;');
+                    element.innerText = "Status: Connected";
+                }
+            };
+
+            function render_details(ent) {
+                const commit_container = document.getElementById("commit_container");
+
+                if (ent === null) {
+                    commit_container.setAttribute('style', 'display: none;');
+                    return;
+                } else {
+                    commit_container.setAttribute('style', 'display: block');
+                }
+
+                const commit_id = document.getElementById("commit_id");
+                const commands = document.getElementById("commands");
+                const diffs_root = document.getElementById("diffs_root");
+                const jump = document.getElementById("jump");
+                
+                if (ent.is_head) {
+                    commit_id.innerText = "   (HEAD -> " + ent.branch + ")   " + ent.id;
+                } else {
+                    commit_id.innerText = ent.id;
+                }
+                
+                commands.innerText = ent.commit_message;
+                while (diffs_root.childElementCount > 0) {
+                    diffs_root.removeChild(diffs_root.firstChild);
+                }
+
+                for (const k in ent.diffs) {
+                    const child_root = document.createElement('li');
+                    child_root.classList.add("commit-diff-item");
+                    child_root.id = "commit-diff-item" + k;
+
+                    const child_path = document.createElement('p');
+                    child_path.innerText = k;
+                    child_root.appendChild(child_path);
+
+                    const child_detail = document.createElement('code');
+                    child_detail.innerText = ent.diffs[k];
+                    child_root.appendChild(child_detail);
+
+                    diffs_root.appendChild(child_root);
+                    console.log(ent.diffs[k]);
+                }
+
+                jump.onclick = (ev) => {
+                    console.log("jump to" + ent.id_full);
+                    webSocketMsgOnce({ endpoint: "jump", params: ent.id_full })
+                }
+            }
+
+            render_details(null);
 
             function render(state) {
                 console.log(state)
-                // https://mermaid.js.org/syntax/gitgr
-                const drawDiagram = async function () {
-                    var element = document.querySelector('#diagram');
-                    const graphDefinition = "gitGraph TB:\n" + state.graph;
-                    // console.log(graphDefinition);
-                    const { svg, bindFunctions } = await mermaid.render('graphDiv', graphDefinition);
-                    element.innerHTML = svg;
-                    if (bindFunctions) {
-                        bindFunctions(element);
-                    }
-                    document.querySelectorAll("#diagram .commit").forEach(element => {
-                        element.classList.forEach(cls => {
-                            if (!cls.startsWith('commit')) { // all stylistic attrs start with class, the commit ID is just alone 
-                                
-                                var annotation = document.createElement('div');
-                                annotation.innerText = state.messages[cls];
 
-                                var jump_to = document.createElement('button');
-                                jump_to.onclick = (ev) => {
-                                    console.log("jump to" + state.oids[cls]);
-                                    webSocketMsgOnce({ endpoint: "jump", params: state.oids[cls] })
+                var graphContainer = document.querySelector('#diagram');
+
+                const branches = new Map();
+
+                if (gitgraph === null) {
+                    gitgraph = GitgraphJS.createGitgraph(graphContainer, {
+                        orientation: GitgraphJS.Orientation.VerticalReverse,
+                        template: GitgraphJS.templateExtend(null, {
+                            branch: {
+                                label: {
+                                    font: 'atkinson-hyperlegible-bold'
                                 }
-                                jump_to.innerText = "jump to commit";
-                                annotation.appendChild(jump_to);
+                            },
+                            commit: {
+                                message: {
+                                    color: 'white',
+                                    displayAuthor: false,
+                                    displayHash: false,
+                                    font: 'atkinson-hyperlegible-regular'
+                                },
+                                dot: {
+                                    color: 'white'
+                                }
+                            },
+                        }),
+                    });
+                } else {
+                    gitgraph.clear();
+                }
 
-                                // https://atomiks.github.io/tippyjs/
-                                // list of params
-                                // https://atomiks.github.io/tippyjs/v6/all-props
-                                tippy(element, { 
-                                    content: annotation, 
-                                    appendTo: () => document.body,
-                                    animation: 'shift-away',
-                                    placement: 'right',
-                                    interactive: true,
-                                    allowHTML: true,
-                                    });
-                            }
-                        })
-                    })
-                };
+                console.log(gitgraph);
 
-                drawDiagram();
+                const series = state.graph_timeseries;
+                // const tooltips = new Map();
+
+                state.graph_timeseries.forEach((ent, t) => {
+                    if (ent.entity === "branch") {
+                        branches[ent.name] = gitgraph.branch(ent.name);
+                    }
+                    else if (ent.entity === "commit") {
+
+                        ent.diffs = state.diffs[ent.id_full];
+
+                        const onClick = () => {
+                            render_details(ent);
+                            // if (tooltips.has(ent.id_full)) {
+                            //     tooltips[ent.id_full].show(); // TODO
+                            // } else {
+                            //     var annotation = document.createElement('div');
+                            //     var jump_to = document.createElement('button');
+                            //     jump_to.onclick = (ev) => {
+                            //         console.log("jump to" + ent.id_full);
+                            //         webSocketMsgOnce({ endpoint: "jump", params: ent.id_full })
+                            //     }
+                            //     // jump_to.innerText = "jump to commit";
+                            //     // annotation.appendChild(jump_to);
+                            //     // document.body.appendChild(annotation);
+                            //     // Popper.createPopper(element, annotation);
+                            //     tooltips[ent.id_full] = annotation;
+                            // }
+                        };
+
+                        var dotStyle = {};
+                        if (ent.id_full === state.current) {
+                            dotStyle.color = 'green';
+                            dotStyle.strokeWidth = '2';
+                            dotStyle.strokeColor = 'white';
+                            ent.is_head = true;
+                            render_details(ent);
+                        } else {
+                            ent.is_head = false;
+                        }
+
+                        branches[ent.branch].commit({
+                            subject: ent.commit_message,
+                            hash: ent.id_full,
+                            onMessageClick: onClick,
+                            onClick: onClick,
+                            style: { dot: dotStyle }
+                        });
+                    }
+                });
+
+                // const reference = document.querySelector('#my-node');
+                // const bubble = document.createElement('div');
+                // bubble.textContent = 'This is my bubble';
+                // bubble.classList.add('my-bubble');
+                // document.body.appendChild(bubble);
             }
-        
+
             function connectToServer(url) {
                 let socket = new WebSocket(url);
-        
+
                 socket.onopen = () => {
-                    webSocketMsgOnce({ endpoint:"fetch", params:"" }).then((msg) => {
+                    webSocketMsgOnce({ endpoint: "fetch", params: "" }).then((msg) => {
                         render(JSON.parse(msg.data))
                     });
                 }
-        
-                socket.onmessage = (msg) => render(JSON.parse(msg.data));
-        
+
+                socket.onmessage = (msg) => {
+                    set_conn_status(true);
+                    render(JSON.parse(msg.data));
+                }
+
                 socket.onclose = () => {
                     console.log("WebSocket closed, retrying in 1 second...");
                     setTimeout(() => connectToServer(url), 1000);
                 };
-        
-                socket.onerror = (error) => console.error("WebSocket error:", error);
+
+                socket.onerror = (error) => {
+                    set_conn_status(false);
+                    console.error("WebSocket error:", error);
+                }
             }
-        
+
             function webSocketMsgOnce(req) {
                 return new Promise((resolve, reject) => {
                     let socket = new WebSocket("ws://localhost:8008");
-        
+
                     socket.onopen = () => {
                         socket.send(JSON.stringify(req));
                     }
-        
+
                     socket.onmessage = (e) => {
+                        set_conn_status(true);
                         resolve(e);
                         socket.close();
                     }
-        
+
                     socket.onerror = (e) => {
+                        set_conn_status(false);
                         reject(e);
                     }
                 });
             }
-        
+
             connectToServer("ws://localhost:8008");
         });
     </script>
 </body>
+
 </html>

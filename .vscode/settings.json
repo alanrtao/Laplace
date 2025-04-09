@@ -1,4 +1,10 @@
 {
+    "search.exclude": {
+        "**/node_modules": true,
+        "**/bower_components": true,
+        "**/*.code-search": true,
+        "external": true,
+    },
     "files.associations": {
         "**/adapter/**": "shellscript",
         "iostream": "cpp",
@@ -92,7 +98,12 @@
         "__split_buffer": "cpp",
         "__tree": "cpp",
         "filesystem": "cpp",
-        "print": "cpp"
+        "print": "cpp",
+        "__locale": "cpp",
+        "ios": "cpp",
+        "locale": "cpp",
+        "queue": "cpp",
+        "stack": "cpp"
     },
     "cmake.automaticReconfigure": false
 }
