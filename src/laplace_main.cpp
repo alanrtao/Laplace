@@ -786,7 +786,7 @@ std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit 
     for (const auto &subcommand : subcommands)
     {
         subcommands_str.append(subcommand);
-        subcommands_str.append("\n");
+        subcommands_str.append(";\n");
     }
 
     // https://libgit2.org/docs/examples/init/

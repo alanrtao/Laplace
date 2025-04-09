@@ -21,7 +21,7 @@ function __laplace_push() {
     rm $srcf
 
     echo "__laplace_push" | /bin/laplace \
-    -i PROMPT_COMMAND -i __laplace \
+    -i PROMPT_COMMAND -i __laplace -i PWD -i SHLVL \
     2220 env 2221 alias 2222 shopt 2223 func 2224 trap
 
     exec 2220<&-
@@ -55,7 +55,7 @@ function __laplace_postcommand() {
 
 PROMPT_COMMAND="__laplace_postcommand"
 
-echo "Welcome to Laplace! :>"
+echo "Welcome to Laplace!"
 
 srcf=$(mktemp)
 
