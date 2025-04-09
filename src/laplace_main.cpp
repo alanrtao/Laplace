@@ -902,6 +902,8 @@ std::expected<void, int> on_client_msg_jump(const git_oid &oid)
     {
         // std::cout << "jump detached: " << oid_str(oid) << std::endl;
         lg2(git_repository_set_head_detached(repo, &oid), "jump back to " + oid_str(oid));
+    } else {
+        subcommands.clear();
     }
 
     broadcast_state();
