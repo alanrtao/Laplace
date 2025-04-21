@@ -237,11 +237,11 @@ std::expected<void, std::string> restart_shell(const opts_main_t &opts, const op
     // this allows the first prompt command (i.e. without any command attached to it) to be ignored,
     // fixing the creation of unintended branches & commits
 
-    const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
-    if (!std::filesystem::exists(adapter))
-    {
-        throw("Adapter not found: " + adapter);
-    }
+    // const std::string adapter = "/adapter/" + opts.frontend; // TODO: refactor
+    // if (!std::filesystem::exists(adapter))
+    // {
+    //     throw("Adapter not found: " + adapter);
+    // }
 
     int pid;
     if (pid = fork(); pid < 0)
@@ -270,9 +270,10 @@ std::expected<void, std::string> restart_shell(const opts_main_t &opts, const op
 
         // TODO: look into zsh params
         auto cmd = const_cast<char *>(opts.frontend_path.c_str());
+        chdir("/workspace");
         char *const argv[] = {
             cmd,
-            const_cast<char *>("--rcfile"), const_cast<char *>(adapter.c_str()),
+            // const_cast<char *>("--rcfile"), const_cast<char *>(adapter.c_str()),
             NULL};
         execve(opts.frontend_path.c_str(), argv, NULL);
         perror("execve");
@@ -708,10 +709,10 @@ std::expected<void, int> on_shell_msg(const std::string_view msg)
                         });
                     }); });
             }
-
-            subcommands.clear();
             broadcast_state();
         }
+
+        subcommands.clear(); // clear subcommand history regardless of changes or not
     }
 
     return {};

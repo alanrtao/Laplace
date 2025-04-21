@@ -1,10 +1,10 @@
 FROM ubuntu:latest
 
 RUN apt-get update && \
-    apt-get install -y socat net-tools && \
+    apt-get install -y zsh && \
     rm -rf /var/lib/apt/lists/*
 
 COPY ./build/laplace /bin
-COPY ./adapter/ /adapter/
+COPY ./adapter/ /workspace
 
-ENTRYPOINT ["/bin/laplace", "bash"]
+ENTRYPOINT ["/bin/laplace", "zsh"]
