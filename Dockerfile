@@ -7,4 +7,4 @@ RUN apt-get update && \
 COPY ./build/laplace /bin
 COPY ./adapter/ /workspace
 
-ENTRYPOINT ["/bin/laplace", "zsh"]
+ENTRYPOINT ["/bin/laplace", "bash"]
