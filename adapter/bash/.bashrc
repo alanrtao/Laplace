@@ -5,9 +5,9 @@ srcf=$(mktemp)
 # env
 if [ -f '/tmp/__laplace_env' ]; then
   # cat '/tmp/__laplace_env'
-  while IFS="" read -r k; do
-    printf "unset %s\n" "$k" >> $srcf
-  done < <(compgen -e)
+  # while IFS="" read -r k; do
+    # printf "unset %s\n" "$k" >> $srcf
+  # done < <(compgen -e)
   while IFS="" read -r -d '' kv; do
     printf "export %s\n" "$kv" >>  $srcf
   done < '/tmp/__laplace_env'
@@ -17,9 +17,9 @@ fi
 if [ -f '/tmp/__laplace_alias' ]; then
   # cat '/tmp/__laplace_alias'
   # alias
-  while IFS="" read -r a; do
-    printf "unalias %s\n" "$a" >>  $srcf
-  done < <(compgen -a)
+  # while IFS="" read -r a; do
+    # printf "unalias %s\n" "$a" >>  $srcf
+  # done < <(compgen -a)
   while IFS="" read -r -d '' a; do
     printf "%s\n" "$a" >>  $srcf
   done < '/tmp/__laplace_alias'
@@ -29,9 +29,9 @@ fi
 if [ -f '/tmp/__laplace_func' ]; then
   # cat '/tmp/__laplace_func'
   # func
-  while IFS="" read -r f; do
-    printf "unset %s\n" "$f" >>  $srcf
-  done < <(compgen -A function)
+  # while IFS="" read -r f; do
+    # printf "unset %s\n" "$f" >>  $srcf
+  # done < <(compgen -A function)
   while IFS="" read -r -d '' f; do
     printf "%s\n" "$f" >> $srcf
   done < '/tmp/__laplace_func'
@@ -41,9 +41,9 @@ fi
 if [ -f '/tmp/__laplace_trap' ]; then
   # cat '/tmp/__laplace_trap'
   # trap
-  for SIG in $(seq 0 64) ERR RETURN; do
-    printf "trap - %s\n" "$SIG" >> $srcf # this also unregisters this current flush trap
-  done
+  # for SIG in $(seq 0 64) ERR RETURN; do
+    # printf "trap - %s\n" "$SIG" >> $srcf # this also unregisters this current flush trap
+  # done
   while IFS="" read -r -d '' t; do
     printf "%s\n" "$t" >> $srcf
   done < '/tmp/__laplace_trap'

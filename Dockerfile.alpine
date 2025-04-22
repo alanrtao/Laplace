@@ -1,10 +1,6 @@
-FROM ubuntu:noble
+FROM alpine:latest
 
-RUN apt-get update && apt-get install -yq \
-cmake \
-build-essential \
-gcc \
-zlib1g-dev
+RUN apk add --update --no-cache bash cmake gcc g++ zlib-dev make gdb gcompat
 
 RUN --mount=type=bind,source=.,target=/src \
     mkdir -p /build && \

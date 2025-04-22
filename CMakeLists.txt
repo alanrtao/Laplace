@@ -33,21 +33,3 @@ target_link_libraries(laplace PRIVATE
     ixwebsocket 
 )
 
-# refresh docker image
-add_custom_target(laplace-docker-bash ALL
-    COMMAND docker build -t laplace:bash -f "Dockerfile.bash" .
-    DEPENDS laplace
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-add_custom_target(laplace-docker-alpine-bash ALL
-    COMMAND docker build -t laplace:alpine-bash -f "Dockerfile.alpine_bash" .
-    DEPENDS laplace
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
-add_custom_target(laplace-docker-zsh ALL
-    COMMAND docker build -t laplace:zsh -f "Dockerfile.zsh" .
-    DEPENDS laplace
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)

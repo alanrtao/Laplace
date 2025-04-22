@@ -24,17 +24,17 @@ export _ModuleTable001_=X01vZHVsZVRhYmxlXyA9IHsKTVR2ZXJzaW9uID0gMywKY19yZWJ1aWxk
 
 export __LMOD_REF_COUNT_MODULEPATH=/root/modulefiles:1
 
-export LOADEDMODULES=gcc/13.3.0
-
-export _LMFILES_=/root/modulefiles/gcc/13.3.0.lua
-
 export CC=gcc
+
+export CXX=g++
 
 export F77=gfortran
 
 export FC=gfortran
 
-export CXX=g++
+export LOADEDMODULES=gcc/13.3.0
+
+export _LMFILES_=/root/modulefiles/gcc/13.3.0.lua
 
 _module_not_yet_loaded () 
 { 

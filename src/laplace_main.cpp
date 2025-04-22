@@ -201,7 +201,7 @@ std::expected<void, std::string> serialize_existing_metadata()
         }
 
         std::string f_dst = "/tmp/__laplace_" + k;
-        int fd_dst = open(f_dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC);
+        int fd_dst = open(f_dst.c_str(), O_CREAT | O_WRONLY | O_TRUNC, 0666);
 
         if (fd_dst < 0)
         {
@@ -280,7 +280,7 @@ std::expected<void, std::string> restart_shell(const opts_main_t &opts, const op
         //     cmd,
         //     // const_cast<char *>("--rcfile"), const_cast<char *>(adapter.c_str()),
         //     NULL};
-        execve(opts.frontend_path.c_str(), (char *const*) argv.data(), NULL);
+        execve(opts.frontend_path.c_str(), (char *const*) argv.data(), environ);
         perror("execve");
         exit(1);
     }

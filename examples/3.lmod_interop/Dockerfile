@@ -1,12 +1,12 @@
 FROM laplace:bash
 
+ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,target=/var/cache/apt \
     --mount=type=cache,target=/var/lib/apt \
     apt update -yq; \
     apt install -yq \
-        git \
-        gcc \
-        make \
+        software-properties-common \
+        clang \
         wget \
         autoconf \
         python3 \
@@ -24,6 +24,9 @@ RUN --mount=type=cache,target=/var/cache/apt \
         bc \
         vim
 
+# no need to propagate this into the work environment, just drop it here
+ENV DEBIAN_FRONTEND=
+
 WORKDIR /root
 RUN wget https://github.com/TACC/Lmod/archive/refs/tags/8.7.59.tar.gz
 RUN tar xzvf 8.7.59.tar.gz
@@ -35,4 +38,5 @@ RUN make install
 WORKDIR /root
 RUN rm -r Lmod-8.7.59
 RUN mkdir modulefiles
-
+ADD test.c .
+ADD CMakeLists.txt .

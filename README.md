@@ -1,12 +1,16 @@
 # Laplace
 
-Laplace is primarily meant to be a shell education tool. The motivating principle is to get hands dirty and revert
-if anything goes wrong. A Git-like commit history mechanism is used, where each bash command is a commit and its
-effects (on files and variables) within the workspace is captured.
-
 ## Building
 - `git submodule update --init --recursive`
-- `mkdir build`, `cd build`, `CC=clang CXX=clang++ cmake ..`, `make -j`
+- Run `export DOCKER_BUILDKIT=1`
+- Run `docker build -t laplace:bash -f Dockerfile.bash .`
+- Run `docker build -t laplace:zsh -f Dockerfile.zsh .`
+- Run `docker build -t laplace:alpine -f Dockerfile.alpine .`
+<!-- - `mkdir build`, `cd build`, `cmake ..`, `make -j` -->
+
+## Demos
+- See examples at [folder](./examples/)
+- Each example uses its own Docker image that is dependent on the above base images.
 
 ## Usage
 - Laplace saves progress to the `./playground` folder (you can switch to different names in the code below)
