@@ -8,6 +8,7 @@
 struct opts_main_t {
     std::string frontend;
     std::string frontend_path;
+    std::vector<std::string> argv;
     int socket;
 };
 

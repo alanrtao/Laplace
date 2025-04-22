@@ -5,6 +5,8 @@ RUN apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 COPY ./build/laplace /bin
-COPY ./adapter/ /workspace
 
-ENTRYPOINT ["/bin/laplace", "bash"]
+# /root is the home directory of the default Docker user
+COPY ./adapter/zsh /root/
+
+ENTRYPOINT ["/bin/laplace", "zsh", "--rcs"]

@@ -15,10 +15,17 @@ int main(int argc, char *argv[])
     }
     else
     {
+        std::vector<std::string> argv_for_shell {};
+        for (int i = 2; i < argc; ++i) {
+            std::cout << argv[i] << std::endl;
+            argv_for_shell.push_back(argv[i]);
+        }
+
         const std::string shell(argv[1]);
         main_mode({
             .frontend=shell,
             .frontend_path="/bin/"+shell,
+            .argv = argv_for_shell,
         });
     }
 }

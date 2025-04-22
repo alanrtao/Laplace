@@ -60,7 +60,7 @@ std::expected<void, int> on_client_msg(std::shared_ptr<ix::ConnectionState> conn
 
 std::expected<void, int> serialize_metadata(const metadata_t &msg);
 std::expected<void, int> apply_serialized_metadata();
-std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit *> &parents);
+std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit *> &parents, const std::string& commit_message_prefix = "");
 
 struct laplace_state_resp
 {
@@ -269,13 +269,18 @@ std::expected<void, std::string> restart_shell(const opts_main_t &opts, const op
         // reopen_tty(opts_.tty_path);
 
         // TODO: look into zsh params
-        auto cmd = const_cast<char *>(opts.frontend_path.c_str());
         chdir("/workspace");
-        char *const argv[] = {
-            cmd,
-            // const_cast<char *>("--rcfile"), const_cast<char *>(adapter.c_str()),
-            NULL};
-        execve(opts.frontend_path.c_str(), argv, NULL);
+        std::vector<const char*> argv {};
+        argv.push_back(opts.frontend_path.c_str());
+        for (auto& v : opts.argv) {
+            argv.push_back(v.c_str());
+        }
+        argv.push_back(nullptr);
+        // char *const argv[] = {
+        //     cmd,
+        //     // const_cast<char *>("--rcfile"), const_cast<char *>(adapter.c_str()),
+        //     NULL};
+        execve(opts.frontend_path.c_str(), (char *const*) argv.data(), NULL);
         perror("execve");
         exit(1);
     }
@@ -423,7 +428,7 @@ std::expected<void, int> init_repo(const char *repo_path)
     opts.initial_head = "main";
     opts.description = "Repository managed by Laplace, with versions corresponding to Bash commands";
     lg2(git_repository_init_ext(&repo, repo_path, &opts), "create repository");
-    return create_new_commit({nullptr}).and_then([](git_commit *commit) -> std::expected<void, int>
+    return create_new_commit({nullptr}, "Initialize environment").and_then([](git_commit *commit) -> std::expected<void, int>
                                                  {
         // git_reference* branch;
         // lg2(git_branch_create(&branch, repo, "main", commit, 0), "git branch create");
@@ -760,7 +765,8 @@ std::expected<void, int> apply_serialized_metadata()
     return {};
 }
 
-std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit *> &parents)
+
+std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit *> &parents, const std::string& commit_message_prefix)
 {
     int err;
 
@@ -783,11 +789,13 @@ std::expected<git_commit *, int> create_new_commit(const std::vector<git_commit 
     defer([tree]
           { git_tree_free(tree); });
 
-    std::string subcommands_str = "";
-    for (const auto &subcommand : subcommands)
+    std::string subcommands_str = commit_message_prefix == "" ? "" : commit_message_prefix + "\n";
+    for (std::string s : subcommands)
     {
-        subcommands_str.append(subcommand);
-        subcommands_str.append(";\n");
+        rtrim(s);
+        ltrim(s);
+        subcommands_str.append(s + ";\n");
+        // subcommands_str.append(";\n");
     }
 
     // https://libgit2.org/docs/examples/init/

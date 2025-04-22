@@ -32,25 +32,26 @@ function __laplace_push() {
 }
 
 function __laplace_precommand() {
-  # https://jichu4n.com/posts/debug-trap-and-prompt_command-in-bash/
-  # prevents trap from executing within post command
-  if [ -z "$AT_PROMPT" ]; then
+  if [[ $BASH_COMMAND = "__laplace_postcommand" ]]; then
     return
   fi
-  unset AT_PROMPT
-  trap - SIGUSR1
-
-  # for "subcommands" within the same command entered from prompt, only send
-  # the command itself without diffing the shell state
   echo "$BASH_COMMAND" | /bin/laplace
 }
 
+__laplace_lineno=0
 function __laplace_postcommand() {
-  AT_PROMPT=1
+  trap - DEBUG
 
   # for checkpoints, actually submit the entire state for diffing purposes
+
+  if [[ $__laplace_lineno = '0' ]]; then
+    echo "Initial workspace entry" | /bin/laplace
+    __laplace_lineno=1
+  fi
+
   __laplace_push
-  trap "__laplace_precommand" DEBUG
+
+  trap '__laplace_precommand' DEBUG
 }
 
 PROMPT_COMMAND="__laplace_postcommand"
@@ -122,3 +123,6 @@ fi
 # cat $srcf
 source $srcf
 rm $srcf
+
+# __laplace_postcommand
+
