@@ -2,7 +2,9 @@
 - Please compile Laplace following instructions at [top level README](../../README.md).
 
 ## Load Prepared Example
-Laplace allows for loading prior serialized data (see [prepared](./prepared/) folder). 
+- Laplace allows for loading prior serialized data (see [prepared](./prepared/) folder).
+- Please run `tar xzvf prepared.tar.gz` to extract the serialized data, including the Git metadata.
+- Then, run `docker run --rm -it -p 8008:8008/tcp -v./prepared:/__laplace laplace:bash`. You can now jump to step 6 of the [next session](#constructing-from-scratch).
 
 ## Constructing from Scratch
 1. Launch the Ubuntu-Bash variant of Laplace directly using the following command
