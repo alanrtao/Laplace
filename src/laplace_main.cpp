@@ -122,7 +122,6 @@ void print_lg2_err(int error, const std::string &msg)
 
 struct opts_additional_t
 {
-    std::string tty_path;
 };
 
 std::expected<std::string, std::string> get_current_tty()
@@ -349,14 +348,14 @@ std::expected<void, std::string> manage_shell(const opts_main_t &opts) noexcept
     /* Shell monitoring and restart thread (i.e. main thread) */
 
     // get TTY path once to use across multiple restarts
-    auto tty = get_current_tty();
-    abortif(tty);
+    // auto tty = get_current_tty();
+    // abortif(tty);
     // std::cout << *tty << std::endl;
 
     // restart loop
     while (true)
     {
-        if (auto res = restart_shell(opts, {.tty_path = *tty}); !res)
+        if (auto res = restart_shell(opts, {}); !res)
         {
             std::cerr << res.error() << std::endl;
             std::cerr << "Restart shell failed, exiting..." << std::endl;
@@ -386,13 +385,19 @@ std::expected<void, std::string> manage_shell(const opts_main_t &opts) noexcept
 
 void shell_listener(int sock_fd)
 {
-    std::array<char, 1 * 1024 * 1024> buf{};
+    char *buf = (char*)(malloc(sizeof(char) * 1024 * 1024));
+    if (!buf) {
+        perror("Allocate buffer");
+        return;
+    }
+    defer([buf]{ free(buf); });
+
     while (true)
     {
-        int n = recvfrom(sock_fd, buf.data(), 1024 * 1024, 0, NULL, NULL);
+        int n = recvfrom(sock_fd, buf, 1024 * 1024, 0, NULL, NULL);
         if (n > 0)
         {
-            on_shell_msg(std::string_view(buf.begin(), buf.begin() + n - 1));
+            on_shell_msg(std::string_view(buf, buf + n - 1));
         }
         else if (n < 0)
         {

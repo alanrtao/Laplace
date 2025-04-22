@@ -1,7 +1,7 @@
 #include <iostream>
 #include <algorithm>
 
-#include <sys/poll.h>
+#include <poll.h>
 
 #include "laplace.h"
 
@@ -22,6 +22,7 @@ int main(int argc, char *argv[])
         }
 
         const std::string shell(argv[1]);
+
         main_mode({
             .frontend=shell,
             .frontend_path="/bin/"+shell,

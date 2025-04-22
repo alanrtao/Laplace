@@ -1,7 +1,9 @@
 FROM alpine:latest
 
-RUN apk add --update --no-cache bash cmake gcc g++ zlib-dev make gdb gcompat
+RUN apk add --update --no-cache bash cmake gcc g++ zlib-dev make
+# RUN apk add --no-cache gcompat gdb
 
+# optionally add -DCMAKE_BUILD_TYPE=Debug 
 RUN --mount=type=bind,source=.,target=/src \
     mkdir -p /build && \
     cd /build && \

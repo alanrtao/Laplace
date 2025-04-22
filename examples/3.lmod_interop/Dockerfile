@@ -39,4 +39,3 @@ WORKDIR /root
 RUN rm -r Lmod-8.7.59
 RUN mkdir modulefiles
 ADD test.c .
-ADD CMakeLists.txt .
