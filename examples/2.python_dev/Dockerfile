@@ -10,5 +10,5 @@ RUN apk add --no-cache python3 python3-dev py3-pip
 RUN pip2 install virtualenv
 RUN pip3 install virtualenv
 
-RUN virtualenv -p python2 /root/.venv2 && \
+RUN virtualenv -p python2 /root/.venv2
 RUN virtualenv -p python3 /root/.venv3
